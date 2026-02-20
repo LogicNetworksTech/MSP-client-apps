@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Send Fax - Evergreen AFC</title>
+    <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
+    <style>
+        :root {
+            --primary: #2e7d32;
+            --primary-light: #4caf50;
+            --primary-dark: #1b5e20;
+            --accent: #81c784;
+            --bg: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%);
+            --card-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            --success: #43a047;
+            --warning: #ff9800;
+            --error: #e53935;
+            --text: #333;
+            --text-light: #666;
+            --border: #e0e0e0;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: var(--bg); 
+            min-height: 100vh; 
+            padding: 20px;
+            color: var(--text);
+        }
+        
+        .container { max-width: 800px; margin: 0 auto; }
+        
+        /* Header */
+        .header-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--card-shadow);
+            border-top: 4px solid var(--primary);
+        }
+        .header-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .logo { height: 48px; width: auto; border-radius: 8px; }
+        .brand-info h2 { color: var(--primary-dark); font-size: 18px; font-weight: 700; }
+        .brand-info span { color: var(--text-light); font-size: 13px; }
+        h1 { 
+            margin-top: 20px; 
+            color: var(--primary-dark); 
+            font-size: 28px; 
+            display: flex; 
+            align-items: center; 
+            gap: 12px;
+            font-weight: 700;
+        }
+        
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--card-shadow);
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* Form Elements */
+        .form-group { margin-bottom: 20px; }
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.2s;
+            background: #fafafa;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: white;
+            box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.1);
+        }
+        .form-input::placeholder { color: #aaa; }
+        .form-hint { font-size: 12px; color: var(--text-light); margin-top: 6px; }
+        
+        /* Phone Input with Contacts */
+        .phone-input-group { position: relative; }
+        .phone-input-group .form-input { padding-right: 100px; }
+        .contacts-btn {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 8px 14px;
+            background: var(--accent);
+            color: var(--primary-dark);
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .contacts-btn:hover { background: var(--primary-light); color: white; }
+        
+        /* Contacts Dropdown */
+        .contacts-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            width: 300px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            z-index: 100;
+            margin-top: 8px;
+        }
+        .contacts-dropdown.visible { display: block; }
+        .contacts-dropdown-header {
+            padding: 12px 16px;
+            background: #f5f5f5;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .contacts-dropdown-header h4 { font-size: 14px; color: var(--primary-dark); }
+        .contact-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .contact-item:hover { background: #f5f5f5; }
+        .contact-item:last-child { border-bottom: none; }
+        .contact-name { font-weight: 600; color: var(--text); }
+        .contact-number { font-size: 13px; color: var(--text-light); }
+        .contact-delete { color: var(--error); font-size: 18px; padding: 4px 8px; }
+        .contact-delete:hover { background: #ffebee; border-radius: 4px; }
+        .add-contact-form { padding: 12px 16px; background: #f9f9f9; }
+        .add-contact-form input { 
+            width: 100%; 
+            padding: 8px 12px; 
+            border: 1px solid var(--border); 
+            border-radius: 6px; 
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .add-contact-form button {
+            width: 100%;
+            padding: 8px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        /* File Upload */
+        .file-upload-area {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            background: #fafafa;
+        }
+        .file-upload-area:hover, .file-upload-area.dragover {
+            border-color: var(--primary);
+            background: rgba(76, 175, 80, 0.05);
+        }
+        .file-upload-area.has-file {
+            border-color: var(--success);
+            background: rgba(67, 160, 71, 0.08);
+        }
+        .upload-icon { font-size: 48px; margin-bottom: 12px; }
+        .upload-text { color: var(--text-light); font-size: 15px; }
+        .upload-text strong { color: var(--primary); }
+        .file-input { display: none; }
+        .file-info {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 16px;
+            background: white;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+        .file-info .file-icon { font-size: 32px; }
+        .file-info .file-details { text-align: left; }
+        .file-info .file-name { font-weight: 600; color: var(--text); }
+        .file-info .file-size { font-size: 12px; color: var(--text-light); }
+        .file-remove {
+            padding: 6px 12px;
+            background: #ffebee;
+            color: var(--error);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        /* Cover Page */
+        .cover-page-toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            margin-bottom: 16px;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 48px;
+            height: 26px;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #ccc;
+            transition: 0.3s;
+            border-radius: 26px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(22px); }
+        .toggle-label { font-weight: 600; color: var(--text); }
+        
+        .cover-options { display: none; }
+        .cover-options.visible { display: block; }
+        
+        /* Buttons */
+        .btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(46, 125, 50, 0.3);
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(46, 125, 50, 0.4);
+        }
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-secondary {
+            background: #f5f5f5;
+            color: var(--text);
+        }
+        .btn-secondary:hover { background: #e8e8e8; }
+        
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+        
+        /* Success/Error States */
+        .status-banner {
+            padding: 16px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .status-banner.success {
+            background: #e8f5e9;
+            color: var(--success);
+            border: 1px solid #c8e6c9;
+        }
+        .status-banner.error {
+            background: #ffebee;
+            color: var(--error);
+            border: 1px solid #ffcdd2;
+        }
+        .status-banner.sending {
+            background: #e3f2fd;
+            color: #1976d2;
+            border: 1px solid #bbdefb;
+        }
+        .status-icon { font-size: 24px; }
+        .status-message { flex: 1; }
+        .status-message strong { display: block; }
+        .status-message span { font-size: 13px; opacity: 0.8; }
+        .status-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            opacity: 0.5;
+        }
+        .status-close:hover { opacity: 1; }
+        
+        /* Recent Sends */
+        .recent-sends { margin-top: 8px; }
+        .recent-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .recent-item:last-child { border-bottom: none; }
+        .recent-icon { font-size: 20px; margin-right: 12px; }
+        .recent-details { flex: 1; }
+        .recent-number { font-weight: 600; font-size: 14px; }
+        .recent-time { font-size: 12px; color: var(--text-light); }
+        .recent-status {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .recent-status.sent { background: #e8f5e9; color: var(--success); }
+        .recent-status.pending { background: #fff8e1; color: var(--warning); }
+        .recent-status.failed { background: #ffebee; color: var(--error); }
+        
+        /* Footer */
+        .powered-by {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 20px;
+            font-size: 12px;
+            color: var(--text-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .powered-by a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .lnt-logo { height: 20px; width: auto; }
+        
+        /* Loading Spinner */
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Responsive */
+        @media (max-width: 600px) {
+            .container { padding: 10px; }
+            .header-card, .card { padding: 16px; }
+            h1 { font-size: 22px; }
+            .form-actions { flex-direction: column; }
+            .btn { width: 100%; justify-content: center; }
+            .contacts-dropdown { width: 100%; right: 0; left: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-card">
+            <div class="header-top">
+                <div class="brand">
+                    <img src="https://logicnetworkstech.github.io/MSP-client-apps/evergreen-afc/v2/assets/evergreen-logo.jpg" alt="Evergreen AFC" class="logo" onerror="this.style.display='none'">
+                    <div class="brand-info">
+                        <h2>Evergreen AFC</h2>
+                        <span>eFax Portal</span>
+                    </div>
+                </div>
+            </div>
+            <h1>📠 Send Fax</h1>
+        </div>
+
+        <div id="statusBanner"></div>
+
+        <div class="card">
+            <div class="card-title">📞 Recipient</div>
+            
+            <div class="form-group">
+                <label class="form-label">Fax Number *</label>
+                <div class="phone-input-group">
+                    <input type="tel" class="form-input" id="faxNumber" placeholder="(555) 123-4567" maxlength="14">
+                    <button type="button" class="contacts-btn" onclick="toggleContacts()">📋 Contacts</button>
+                    <div class="contacts-dropdown" id="contactsDropdown">
+                        <div class="contacts-dropdown-header">
+                            <h4>📋 Saved Contacts</h4>
+                        </div>
+                        <div id="contactsList"></div>
+                        <div class="add-contact-form">
+                            <input type="text" id="newContactName" placeholder="Contact name">
+                            <input type="tel" id="newContactNumber" placeholder="Fax number">
+                            <button type="button" onclick="addContact()">➕ Save Contact</button>
+                        </div>
+                    </div>
+                </div>
+                <p class="form-hint">Enter 10-digit fax number including area code</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Recipient Name (Optional)</label>
+                <input type="text" class="form-input" id="recipientName" placeholder="Dr. Smith, Tufts Medicine, etc.">
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📎 Document</div>
+            
+            <div class="file-upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                <div class="upload-icon">📄</div>
+                <p class="upload-text">
+                    <strong>Click to upload</strong> or drag and drop<br>
+                    PDF, DOC, DOCX, TIF, PNG, JPG (Max 20MB)
+                </p>
+            </div>
+            <input type="file" class="file-input" id="fileInput" accept=".pdf,.doc,.docx,.tif,.tiff,.png,.jpg,.jpeg">
+            <div id="filePreview"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📝 Cover Page</div>
+            
+            <div class="cover-page-toggle">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="includeCover" onchange="toggleCoverOptions()">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-label">Include cover page</span>
+            </div>
+            
+            <div class="cover-options" id="coverOptions">
+                <div class="form-group">
+                    <label class="form-label">Subject</label>
+                    <input type="text" class="form-input" id="coverSubject" placeholder="Re: Patient Records Request">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Message</label>
+                    <textarea class="form-input" id="coverMessage" rows="4" placeholder="Please find attached documents as requested..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">From</label>
+                    <input type="text" class="form-input" id="coverFrom" placeholder="Evergreen AFC - (978) 955-2505">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="button" class="btn btn-secondary" onclick="clearForm()">🗑️ Clear</button>
+            <button type="button" class="btn btn-primary" id="sendBtn" onclick="sendFax()">
+                📤 Send Fax
+            </button>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🕐 Recent Sends</div>
+            <div class="recent-sends" id="recentSends">
+                <p style="color: var(--text-light); text-align: center; padding: 20px;">No recent faxes</p>
+            </div>
+        </div>
+        
+        <div class="powered-by">
+            Powered by <a href="https://logicnetworks.us" target="_blank">
+                <img src="https://logicnetworkstech.github.io/MSP-client-apps/evergreen-afc/v2/assets/lnt-gear.png" alt="LNT" class="lnt-logo" onerror="this.style.display='none'">
+                Logic Networks
+            </a>
+        </div>
+    </div>
+
+    <script>
+        microsoftTeams.app.initialize();
+
+        const CONFIG = {
+            proxyUrl: 'https://srfax-proxy.nbalbi.workers.dev',
+            clientId: 'EVERGREEN',
+            senderEmail: 'fax@evergreenafcma.com',
+            callerId: '9789552505'
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadContacts();
+            loadRecentSends();
+            setupDragDrop();
+            setupPhoneFormat();
+        });
+
+        // Phone number formatting
+        function setupPhoneFormat() {
+            const input = document.getElementById('faxNumber');
+            input.addEventListener('input', (e) => {
+                let val = e.target.value.replace(/\D/g, '');
+                if (val.length > 0) {
+                    if (val.length <= 3) val = `(${val}`;
+                    else if (val.length <= 6) val = `(${val.slice(0,3)}) ${val.slice(3)}`;
+                    else val = `(${val.slice(0,3)}) ${val.slice(3,6)}-${val.slice(6,10)}`;
+                }
+                e.target.value = val;
+            });
+        }
+
+        // Contacts Management
+        function getContacts() {
+            return JSON.parse(localStorage.getItem('efax_contacts') || '[]');
+        }
+
+        function saveContacts(contacts) {
+            localStorage.setItem('efax_contacts', JSON.stringify(contacts));
+        }
+
+        function loadContacts() {
+            const contacts = getContacts();
+            const list = document.getElementById('contactsList');
+            
+            if (contacts.length === 0) {
+                list.innerHTML = '<p style="padding: 16px; text-align: center; color: var(--text-light);">No saved contacts</p>';
+                return;
+            }
+            
+            list.innerHTML = contacts.map((c, i) => `
+                <div class="contact-item" onclick="selectContact('${c.number}')">
+                    <div>
+                        <div class="contact-name">${c.name}</div>
+                        <div class="contact-number">${c.number}</div>
+                    </div>
+                    <span class="contact-delete" onclick="event.stopPropagation(); deleteContact(${i})">×</span>
+                </div>
+            `).join('');
+        }
+
+        function toggleContacts() {
+            document.getElementById('contactsDropdown').classList.toggle('visible');
+        }
+
+        function selectContact(number) {
+            document.getElementById('faxNumber').value = number;
+            document.getElementById('contactsDropdown').classList.remove('visible');
+        }
+
+        function addContact() {
+            const name = document.getElementById('newContactName').value.trim();
+            const number = document.getElementById('newContactNumber').value.trim();
+            
+            if (!name || !number) { alert('Please enter both name and number'); return; }
+            
+            const contacts = getContacts();
+            contacts.push({ name, number });
+            saveContacts(contacts);
+            
+            document.getElementById('newContactName').value = '';
+            document.getElementById('newContactNumber').value = '';
+            loadContacts();
+        }
+
+        function deleteContact(index) {
+            const contacts = getContacts();
+            contacts.splice(index, 1);
+            saveContacts(contacts);
+            loadContacts();
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.phone-input-group')) {
+                document.getElementById('contactsDropdown').classList.remove('visible');
+            }
+        });
+
+        // File Upload
+        let selectedFile = null;
+
+        function setupDragDrop() {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+
+            ['dragenter', 'dragover'].forEach(e => {
+                dropZone.addEventListener(e, (ev) => {
+                    ev.preventDefault();
+                    dropZone.classList.add('dragover');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(e => {
+                dropZone.addEventListener(e, (ev) => {
+                    ev.preventDefault();
+                    dropZone.classList.remove('dragover');
+                });
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer.files;
+                if (files.length > 0) handleFile(files[0]);
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) handleFile(e.target.files[0]);
+            });
+        }
+
+        function handleFile(file) {
+            const maxSize = 20 * 1024 * 1024; // 20MB
+            const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/tiff', 'image/png', 'image/jpeg'];
+            
+            if (file.size > maxSize) {
+                showStatus('error', 'File too large', 'Maximum file size is 20MB');
+                return;
+            }
+            
+            selectedFile = file;
+            document.getElementById('dropZone').classList.add('has-file');
+            
+            const preview = document.getElementById('filePreview');
+            const icon = file.type.includes('pdf') ? '📕' : file.type.includes('image') ? '🖼️' : '📄';
+            const size = (file.size / 1024 / 1024).toFixed(2);
+            
+            preview.innerHTML = `
+                <div class="file-info">
+                    <span class="file-icon">${icon}</span>
+                    <div class="file-details">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${size} MB</div>
+                    </div>
+                    <button type="button" class="file-remove" onclick="removeFile()">Remove</button>
+                </div>
+            `;
+        }
+
+        function removeFile() {
+            selectedFile = null;
+            document.getElementById('dropZone').classList.remove('has-file');
+            document.getElementById('filePreview').innerHTML = '';
+            document.getElementById('fileInput').value = '';
+        }
+
+        // Cover Page Toggle
+        function toggleCoverOptions() {
+            const checked = document.getElementById('includeCover').checked;
+            document.getElementById('coverOptions').classList.toggle('visible', checked);
+        }
+
+        // Send Fax
+        async function sendFax() {
+            const faxNumber = document.getElementById('faxNumber').value.replace(/\D/g, '');
+            
+            if (!faxNumber || faxNumber.length < 10) {
+                showStatus('error', 'Invalid Number', 'Please enter a valid 10-digit fax number');
+                return;
+            }
+            
+            if (!selectedFile) {
+                showStatus('error', 'No Document', 'Please select a file to fax');
+                return;
+            }
+
+            const btn = document.getElementById('sendBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Sending...';
+            showStatus('sending', 'Sending Fax', 'Please wait while your fax is being transmitted...');
+
+            try {
+                // Convert file to base64
+                const base64 = await fileToBase64(selectedFile);
+                const fileExt = selectedFile.name.split('.').pop().toUpperCase();
+                
+                const formData = new FormData();
+                formData.append('action', 'Queue_Fax');
+                formData.append('sSenderEmail', CONFIG.senderEmail);
+                formData.append('sFaxType', 'SINGLE');
+                formData.append('sToFaxNumber', faxNumber);
+                formData.append('sFileName_1', selectedFile.name);
+                formData.append('sFileContent_1', base64);
+                
+                // Cover page - SRFax requires specific parameter names
+                if (document.getElementById('includeCover').checked) {
+                    const subject = document.getElementById('coverSubject').value || 'Fax Document';
+                    const message = document.getElementById('coverMessage').value || '';
+                    const from = document.getElementById('coverFrom').value || 'Evergreen AFC';
+                    const toName = document.getElementById('recipientName').value || '';
+                    
+                    formData.append('sCoverPage', 'Standard');
+                    formData.append('sCPFromName', from);
+                    formData.append('sCPToName', toName);
+                    formData.append('sCPOrganization', 'Evergreen AFC');
+                    formData.append('sCPSubject', subject);
+                    formData.append('sCPComments', message);
+                }
+                
+                const response = await fetch(CONFIG.proxyUrl, {
+                    method: 'POST',
+                    headers: { 'X-Client-ID': CONFIG.clientId },
+                    body: formData
+                });
+                
+                const data = await response.json();
+
+                if (data.Status === 'Success') {
+                    showStatus('success', 'Fax Queued Successfully!', `Your fax to ${formatPhone(faxNumber)} has been queued for delivery.`);
+                    addRecentSend(faxNumber, 'pending');
+                    clearForm();
+                } else {
+                    throw new Error(data.Result || 'Failed to send fax');
+                }
+            } catch (error) {
+                showStatus('error', 'Failed to Send', error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '📤 Send Fax';
+            }
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => {
+                    const base64 = reader.result.split(',')[1];
+                    resolve(base64);
+                };
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // Recent Sends
+        function getRecentSends() {
+            return JSON.parse(localStorage.getItem('efax_recent') || '[]');
+        }
+
+        function addRecentSend(number, status) {
+            const recent = getRecentSends();
+            recent.unshift({
+                number,
+                status,
+                time: new Date().toISOString()
+            });
+            localStorage.setItem('efax_recent', JSON.stringify(recent.slice(0, 10)));
+            loadRecentSends();
+        }
+
+        function loadRecentSends() {
+            const recent = getRecentSends();
+            const container = document.getElementById('recentSends');
+            
+            if (recent.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-light); text-align: center; padding: 20px;">No recent faxes</p>';
+                return;
+            }
+            
+            container.innerHTML = recent.map(r => {
+                const time = new Date(r.time);
+                const timeStr = time.toLocaleDateString() + ' ' + time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const icon = r.status === 'sent' ? '✅' : r.status === 'pending' ? '⏳' : '❌';
+                return `
+                    <div class="recent-item">
+                        <span class="recent-icon">${icon}</span>
+                        <div class="recent-details">
+                            <div class="recent-number">${formatPhone(r.number)}</div>
+                            <div class="recent-time">${timeStr}</div>
+                        </div>
+                        <span class="recent-status ${r.status}">${r.status}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Status Banner
+        function showStatus(type, title, message) {
+            const icons = { success: '✅', error: '❌', sending: '📤' };
+            document.getElementById('statusBanner').innerHTML = `
+                <div class="status-banner ${type}">
+                    <span class="status-icon">${icons[type]}</span>
+                    <div class="status-message">
+                        <strong>${title}</strong>
+                        <span>${message}</span>
+                    </div>
+                    <button class="status-close" onclick="this.parentElement.remove()">×</button>
+                </div>
+            `;
+            
+            if (type !== 'sending') {
+                setTimeout(() => {
+                    const banner = document.querySelector('.status-banner');
+                    if (banner) banner.remove();
+                }, 8000);
+            }
+        }
+
+        function formatPhone(num) {
+            const c = ('' + num).replace(/\D/g, '');
+            const m = c.match(/^(\d{3})(\d{3})(\d{4})$/);
+            return m ? `(${m[1]}) ${m[2]}-${m[3]}` : num;
+        }
+
+        function clearForm() {
+            document.getElementById('faxNumber').value = '';
+            document.getElementById('recipientName').value = '';
+            document.getElementById('includeCover').checked = false;
+            document.getElementById('coverOptions').classList.remove('visible');
+            document.getElementById('coverSubject').value = '';
+            document.getElementById('coverMessage').value = '';
+            document.getElementById('coverFrom').value = '';
+            removeFile();
+        }
+    </script>
+</body>
+</html>
