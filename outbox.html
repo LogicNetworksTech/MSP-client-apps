@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sent Faxes - eFax</title>
+    <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { margin: 0; color: #323130; font-size: 24px; display: flex; align-items: center; gap: 12px; }
+        h1::before { content: '📤'; font-size: 28px; }
+        .refresh-btn { padding: 8px 16px; background: #0078d4; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        .refresh-btn:hover { background: #106ebe; }
+        .fax-list { background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; }
+        .fax-item { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid #edebe9; }
+        .fax-item:last-child { border-bottom: none; }
+        .fax-item:hover { background: #f3f2f1; }
+        .fax-icon { font-size: 24px; margin-right: 16px; }
+        .fax-details { flex: 1; }
+        .fax-to { font-weight: 600; color: #323130; font-size: 15px; }
+        .fax-date { color: #605e5c; font-size: 13px; margin-top: 4px; }
+        .fax-status { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .fax-status.sent { background: #dff6dd; color: #107c10; }
+        .fax-status.pending { background: #fff4ce; color: #8a6914; }
+        .fax-status.failed { background: #fde7e9; color: #d13438; }
+        .fax-pages { color: #605e5c; font-size: 13px; margin-left: 16px; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #605e5c; }
+        .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
+        .loading { text-align: center; padding: 40px; color: #605e5c; }
+        .loading-spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid #f3f2f1; border-top-color: #0078d4; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 12px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error { padding: 20px; background: #fde7e9; color: #d13438; border-radius: 8px; text-align: center; }
+        .logo { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo"><strong style="color: #0078d4;">Evergreen AFC</strong> eFax</div>
+        <div class="header">
+            <h1>Sent Faxes</h1>
+            <button class="refresh-btn" onclick="loadOutbox()">🔄 Refresh</button>
+        </div>
+        <div id="faxList" class="fax-list">
+            <div class="loading"><div class="loading-spinner"></div><div>Loading sent faxes...</div></div>
+        </div>
+    </div>
+
+    <script>
+        microsoftTeams.app.initialize();
+
+        const SRFAX_CONFIG = {
+            accessId: '423682',
+            accessPwd: 'AFC2026##',
+            apiUrl: 'https://www.srfax.com/SRF_SecWebSvc.php'
+        };
+
+        loadOutbox();
+
+        async function loadOutbox() {
+            const listEl = document.getElementById('faxList');
+            listEl.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>Loading sent faxes...</div></div>';
+
+            try {
+                const formData = new FormData();
+                formData.append('action', 'Get_Fax_Outbox');
+                formData.append('access_id', SRFAX_CONFIG.accessId);
+                formData.append('access_pwd', SRFAX_CONFIG.accessPwd);
+                formData.append('sPeriod', 'ALL');
+
+                const response = await fetch(SRFAX_CONFIG.apiUrl, { method: 'POST', body: formData });
+                const data = await response.json();
+
+                if (data.Status === 'Success') renderFaxes(data.Result || []);
+                else throw new Error(data.Result || 'Failed to load outbox');
+            } catch (error) {
+                listEl.innerHTML = '<div class="error">❌ Error loading sent faxes: ' + error.message + '</div>';
+            }
+        }
+
+        function renderFaxes(faxes) {
+            const listEl = document.getElementById('faxList');
+            if (!faxes || faxes.length === 0) {
+                listEl.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>No sent faxes</div></div>';
+                return;
+            }
+
+            listEl.innerHTML = faxes.map(fax => {
+                const sc = getStatusClass(fax.SentStatus);
+                const st = getStatusText(fax.SentStatus);
+                return `
+                    <div class="fax-item">
+                        <div class="fax-icon">${sc === 'sent' ? '✅' : sc === 'pending' ? '⏳' : '❌'}</div>
+                        <div class="fax-details">
+                            <div class="fax-to">To: ${formatPhone(fax.ToFaxNumber || 'Unknown')}</div>
+                            <div class="fax-date">${fax.DateQueued || ''}</div>
+                        </div>
+                        <span class="fax-status ${sc}">${st}</span>
+                        <div class="fax-pages">${fax.Pages || '?'} pages</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function getStatusClass(s) {
+            switch ((s || '').toLowerCase()) {
+                case 'sent': case 'ok': return 'sent';
+                case 'queued': case 'pending': case 'in progress': return 'pending';
+                default: return 'failed';
+            }
+        }
+
+        function getStatusText(s) {
+            switch ((s || '').toLowerCase()) {
+                case 'sent': case 'ok': return 'Delivered';
+                case 'queued': return 'Queued';
+                case 'pending': case 'in progress': return 'Sending...';
+                default: return s || 'Failed';
+            }
+        }
+
+        function formatPhone(num) {
+            const c = ('' + num).replace(/\D/g, '');
+            const m = c.match(/^(\d{3})(\d{3})(\d{4})$/);
+            return m ? '(' + m[1] + ') ' + m[2] + '-' + m[3] : num;
+        }
+    </script>
+</body>
+</html>

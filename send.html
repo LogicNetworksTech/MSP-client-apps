@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Send Fax - eFax</title>
+    <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 500px; margin: 0 auto; background: white; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        h1 { margin: 0 0 24px 0; color: #323130; font-size: 24px; display: flex; align-items: center; gap: 12px; }
+        h1::before { content: '📠'; font-size: 28px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 6px; color: #323130; font-weight: 600; font-size: 14px; }
+        input[type="tel"], input[type="text"], textarea { width: 100%; padding: 10px 12px; border: 1px solid #c8c8c8; border-radius: 4px; font-size: 14px; transition: border-color 0.2s; }
+        input:focus, textarea:focus { outline: none; border-color: #0078d4; box-shadow: 0 0 0 1px #0078d4; }
+        .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; width: 100%; }
+        .file-input-wrapper input[type="file"] { position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+        .file-input-button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; background: #f3f2f1; border: 2px dashed #c8c8c8; border-radius: 4px; color: #605e5c; cursor: pointer; transition: all 0.2s; }
+        .file-input-button:hover { background: #edebe9; border-color: #0078d4; }
+        .file-name { margin-top: 8px; padding: 8px 12px; background: #e8f4ff; border-radius: 4px; font-size: 13px; color: #0078d4; display: none; }
+        .file-name.show { display: block; }
+        .btn { width: 100%; padding: 12px 24px; background: #0078d4; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        .btn:hover { background: #106ebe; }
+        .btn:disabled { background: #c8c8c8; cursor: not-allowed; }
+        .status { margin-top: 16px; padding: 12px; border-radius: 4px; display: none; }
+        .status.success { display: block; background: #dff6dd; color: #107c10; }
+        .status.error { display: block; background: #fde7e9; color: #d13438; }
+        .status.info { display: block; background: #e8f4ff; color: #0078d4; }
+        .cover-page-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+        .cover-page-toggle input { width: 18px; height: 18px; }
+        .cover-page-fields { display: none; padding: 16px; background: #faf9f8; border-radius: 4px; margin-bottom: 20px; }
+        .cover-page-fields.show { display: block; }
+        .logo { text-align: center; margin-bottom: 20px; }
+        .logo img { max-width: 200px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <strong style="color: #0078d4;">Evergreen AFC</strong> eFax
+        </div>
+        <h1>Send Fax</h1>
+        
+        <form id="faxForm">
+            <div class="form-group">
+                <label for="toNumber">Fax Number *</label>
+                <input type="tel" id="toNumber" placeholder="e.g., 555-123-4567" required>
+            </div>
+
+            <div class="form-group">
+                <label for="callerID">Your Caller ID</label>
+                <input type="text" id="callerID" value="(978) 955-2505" readonly style="background: #f3f2f1;">
+            </div>
+
+            <div class="cover-page-toggle">
+                <input type="checkbox" id="includeCover">
+                <label for="includeCover" style="margin: 0; font-weight: normal;">Include cover page</label>
+            </div>
+
+            <div class="cover-page-fields" id="coverFields">
+                <div class="form-group">
+                    <label for="toName">To (Name)</label>
+                    <input type="text" id="toName" placeholder="Recipient name">
+                </div>
+                <div class="form-group">
+                    <label for="subject">Subject</label>
+                    <input type="text" id="subject" placeholder="Fax subject">
+                </div>
+                <div class="form-group">
+                    <label for="notes">Notes</label>
+                    <textarea id="notes" rows="3" placeholder="Cover page notes..."></textarea>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Attachment * (PDF, DOC, DOCX, TXT, JPG, PNG)</label>
+                <div class="file-input-wrapper">
+                    <div class="file-input-button">📎 Click to attach a file</div>
+                    <input type="file" id="faxFile" accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png" required>
+                </div>
+                <div class="file-name" id="fileName"></div>
+            </div>
+
+            <button type="submit" class="btn" id="submitBtn">📤 Send Fax</button>
+            <div class="status" id="status"></div>
+        </form>
+    </div>
+
+    <script>
+        microsoftTeams.app.initialize();
+
+        const SRFAX_CONFIG = {
+            accessId: '423682',
+            accessPwd: 'AFC2026##',
+            callerID: '9789552505',
+            senderEmail: 'fax@evergreenafcma.com',
+            apiUrl: 'https://www.srfax.com/SRF_SecWebSvc.php'
+        };
+
+        document.getElementById('includeCover').addEventListener('change', function() {
+            document.getElementById('coverFields').classList.toggle('show', this.checked);
+        });
+
+        document.getElementById('faxFile').addEventListener('change', function() {
+            const fileName = this.files[0]?.name || '';
+            const fileNameEl = document.getElementById('fileName');
+            fileNameEl.textContent = '📄 ' + fileName;
+            fileNameEl.classList.toggle('show', !!fileName);
+        });
+
+        document.getElementById('faxForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const status = document.getElementById('status');
+            const toNumber = document.getElementById('toNumber').value.replace(/\D/g, '');
+            const file = document.getElementById('faxFile').files[0];
+            const includeCover = document.getElementById('includeCover').checked;
+            
+            if (!toNumber || !file) {
+                status.className = 'status error';
+                status.textContent = 'Please fill in all required fields.';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Sending...';
+            status.className = 'status info';
+            status.textContent = 'Uploading and sending fax...';
+
+            try {
+                const base64File = await fileToBase64(file);
+                
+                const formData = new FormData();
+                formData.append('action', 'Queue_Fax');
+                formData.append('access_id', SRFAX_CONFIG.accessId);
+                formData.append('access_pwd', SRFAX_CONFIG.accessPwd);
+                formData.append('sCallerID', SRFAX_CONFIG.callerID);
+                formData.append('sSenderEmail', SRFAX_CONFIG.senderEmail);
+                formData.append('sFaxType', 'SINGLE');
+                formData.append('sToFaxNumber', toNumber);
+                formData.append('sFileName_1', file.name);
+                formData.append('sFileContent_1', base64File);
+
+                if (includeCover) {
+                    formData.append('sCoverPage', 'Standard');
+                    formData.append('sToName', document.getElementById('toName').value);
+                    formData.append('sSubject', document.getElementById('subject').value);
+                    formData.append('sNotes', document.getElementById('notes').value);
+                }
+
+                const response = await fetch(SRFAX_CONFIG.apiUrl, { method: 'POST', body: formData });
+                const data = await response.json();
+                
+                if (data.Status === 'Success') {
+                    status.className = 'status success';
+                    status.textContent = '✅ Fax queued successfully! Fax ID: ' + data.Result;
+                    document.getElementById('faxForm').reset();
+                    document.getElementById('fileName').classList.remove('show');
+                } else {
+                    throw new Error(data.Result || 'Failed to send fax');
+                }
+            } catch (error) {
+                status.className = 'status error';
+                status.textContent = '❌ Error: ' + error.message;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '📤 Send Fax';
+            }
+        });
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+    </script>
+</body>
+</html>

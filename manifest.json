@@ -1,0 +1,51 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "be0a18b6-ca52-4e46-a973-3ecc58ef5805",
+  "packageName": "com.logicnetworks.efax.evergreen",
+  "developer": {
+    "name": "Logic Networks",
+    "websiteUrl": "https://logicnetworks.us",
+    "privacyUrl": "https://logicnetworks.us/privacy",
+    "termsOfUseUrl": "https://logicnetworks.us/terms"
+  },
+  "name": {
+    "short": "eFax",
+    "full": "eFax by Logic Networks"
+  },
+  "description": {
+    "short": "Send and receive faxes directly in Teams",
+    "full": "Send faxes, view your inbox, and track sent faxes - all without leaving Microsoft Teams. Powered by SRFax and Logic Networks."
+  },
+  "icons": {
+    "outline": "icon-outline.png",
+    "color": "icon-color.png"
+  },
+  "accentColor": "#0078D4",
+  "staticTabs": [
+    {
+      "entityId": "sendFax",
+      "name": "Send Fax",
+      "contentUrl": "https://logicnetworks.github.io/efax-teams/evergreen/send.html",
+      "scopes": ["personal"]
+    },
+    {
+      "entityId": "inbox",
+      "name": "Inbox",
+      "contentUrl": "https://logicnetworks.github.io/efax-teams/evergreen/inbox.html",
+      "scopes": ["personal"]
+    },
+    {
+      "entityId": "outbox",
+      "name": "Sent",
+      "contentUrl": "https://logicnetworks.github.io/efax-teams/evergreen/outbox.html",
+      "scopes": ["personal"]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": [
+    "logicnetworks.github.io",
+    "*.srfax.com"
+  ]
+}
