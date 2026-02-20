@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fax Inbox - Evergreen AFC</title>
+    <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 20px; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); min-height: 100vh; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .header-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .header-top { display: flex; align-items: center; justify-content: space-between; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .logo { height: 40px; width: auto; }
+        .brand-text { color: #2e7d32; font-weight: 600; font-size: 14px; }
+        h1 { margin: 16px 0 0 0; color: #1b5e20; font-size: 24px; display: flex; align-items: center; gap: 10px; }
+        .refresh-btn { padding: 10px 20px; background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+        .refresh-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(46,125,50,0.3); }
+        .fax-list { background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); overflow: hidden; }
+        .fax-item { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e8f5e9; cursor: pointer; transition: all 0.2s; }
+        .fax-item:hover { background: #f1f8e9; }
+        .fax-item:last-child { border-bottom: none; }
+        .fax-item.unread { background: #e8f5e9; border-left: 4px solid #4caf50; }
+        .fax-item.unread:hover { background: #c8e6c9; }
+        .fax-icon { font-size: 28px; margin-right: 16px; }
+        .fax-details { flex: 1; }
+        .fax-from { font-weight: 600; color: #1b5e20; font-size: 15px; }
+        .fax-date { color: #666; font-size: 13px; margin-top: 4px; }
+        .fax-pages { color: #666; font-size: 13px; padding: 4px 12px; background: #f5f5f5; border-radius: 12px; margin-right: 12px; }
+        .action-btn { padding: 8px 16px; background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+        .action-btn:hover { transform: translateY(-1px); }
+        .empty-state { text-align: center; padding: 60px 20px; color: #666; }
+        .empty-state-icon { font-size: 64px; margin-bottom: 16px; }
+        .loading { text-align: center; padding: 60px; color: #666; }
+        .loading-spinner { display: inline-block; width: 40px; height: 40px; border: 4px solid #e8f5e9; border-top-color: #4caf50; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error { padding: 24px; background: #ffebee; color: #c62828; border-radius: 12px; text-align: center; margin: 20px; }
+        .filter-bar { display: flex; gap: 12px; margin: 16px 0; }
+        .filter-btn { padding: 8px 20px; background: white; border: 2px solid #c8e6c9; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; color: #2e7d32; transition: all 0.2s; }
+        .filter-btn.active { background: #4caf50; color: white; border-color: #4caf50; }
+        .filter-btn:hover:not(.active) { background: #e8f5e9; }
+        .powered-by { text-align: center; margin-top: 20px; font-size: 12px; color: #757575; }
+        .powered-by a { color: #4caf50; text-decoration: none; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-card">
+            <div class="header-top">
+                <div class="brand">
+                    <img src="https://logicnetworkstech.github.io/MSP-client-apps/assets/evergreen-logo.jpg" alt="Evergreen AFC" class="logo" onerror="this.style.display='none'">
+                    <span class="brand-text">eFax Portal</span>
+                </div>
+                <button class="refresh-btn" onclick="loadInbox()">🔄 Refresh</button>
+            </div>
+            <h1>📥 Fax Inbox</h1>
+        </div>
+
+        <div class="filter-bar">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="unread">Unread</button>
+        </div>
+
+        <div id="faxList" class="fax-list">
+            <div class="loading"><div class="loading-spinner"></div><div>Loading faxes...</div></div>
+        </div>
+        
+        <div class="powered-by">
+            Powered by <a href="https://logicnetworks.us" target="_blank">Logic Networks</a>
+        </div>
+    </div>
+
+    <script>
+        microsoftTeams.app.initialize();
+
+        const CONFIG = {
+            proxyUrl: 'https://srfax-proxy.nbalbi.workers.dev',
+            clientId: 'EVERGREEN'
+        };
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                filterFaxes(this.dataset.filter);
+            });
+        });
+
+        function filterFaxes(filter) {
+            document.querySelectorAll('.fax-item').forEach(item => {
+                if (filter === 'all') item.style.display = 'flex';
+                else if (filter === 'unread') item.style.display = item.classList.contains('unread') ? 'flex' : 'none';
+            });
+        }
+
+        loadInbox();
+
+        async function loadInbox() {
+            const listEl = document.getElementById('faxList');
+            listEl.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>Loading faxes...</div></div>';
+
+            try {
+                const formData = new FormData();
+                formData.append('action', 'Get_Fax_Inbox');
+                formData.append('sPeriod', 'ALL');
+
+                const response = await fetch(CONFIG.proxyUrl, {
+                    method: 'POST',
+                    headers: { 'X-Client-ID': CONFIG.clientId },
+                    body: formData
+                });
+                
+                const data = await response.json();
+
+                if (data.Status === 'Success') renderFaxes(data.Result || []);
+                else throw new Error(data.Result || 'Failed to load inbox');
+            } catch (error) {
+                listEl.innerHTML = '<div class="error">❌ Error loading inbox: ' + error.message + '</div>';
+            }
+        }
+
+        function renderFaxes(faxes) {
+            const listEl = document.getElementById('faxList');
+            if (!faxes || faxes.length === 0) {
+                listEl.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>No faxes in your inbox</div></div>';
+                return;
+            }
+
+            listEl.innerHTML = faxes.map(fax => `
+                <div class="fax-item ${fax.ViewedStatus === 'N' ? 'unread' : ''}" data-id="${fax.FileName}">
+                    <div class="fax-icon">${fax.ViewedStatus === 'N' ? '📩' : '📄'}</div>
+                    <div class="fax-details">
+                        <div class="fax-from">From: ${formatPhone(fax.CallerID || 'Unknown')}</div>
+                        <div class="fax-date">${fax.Date || ''}</div>
+                    </div>
+                    <div class="fax-pages">${fax.Pages || '?'} pages</div>
+                    <button class="action-btn" onclick="downloadFax('${fax.FileName}', 'IN')">⬇️ Download</button>
+                </div>
+            `).join('');
+        }
+
+        function formatPhone(num) {
+            const c = ('' + num).replace(/\D/g, '');
+            const m = c.match(/^(\d{3})(\d{3})(\d{4})$/);
+            return m ? '(' + m[1] + ') ' + m[2] + '-' + m[3] : num;
+        }
+
+        async function downloadFax(fileName, direction) {
+            try {
+                const formData = new FormData();
+                formData.append('action', 'Retrieve_Fax');
+                formData.append('sFaxFileName', fileName);
+                formData.append('sDirection', direction);
+                formData.append('sFaxFormat', 'PDF');
+
+                const response = await fetch(CONFIG.proxyUrl, {
+                    method: 'POST',
+                    headers: { 'X-Client-ID': CONFIG.clientId },
+                    body: formData
+                });
+                
+                const data = await response.json();
+
+                if (data.Status === 'Success' && data.Result) {
+                    const byteChars = atob(data.Result);
+                    const byteNums = new Array(byteChars.length);
+                    for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+                    const blob = new Blob([new Uint8Array(byteNums)], { type: 'application/pdf' });
+                    
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = fileName.replace('.tif', '.pdf');
+                    a.click();
+                    URL.revokeObjectURL(url);
+
+                    // Mark as viewed
+                    const vf = new FormData();
+                    vf.append('action', 'Update_Viewed_Status');
+                    vf.append('sFaxFileName', fileName);
+                    vf.append('sDirection', direction);
+                    vf.append('sMarkasViewed', 'Y');
+                    fetch(CONFIG.proxyUrl, { method: 'POST', headers: { 'X-Client-ID': CONFIG.clientId }, body: vf });
+
+                    const item = document.querySelector(`[data-id="${fileName}"]`);
+                    if (item) { item.classList.remove('unread'); item.querySelector('.fax-icon').textContent = '📄'; }
+                } else throw new Error(data.Result || 'Failed to download');
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
