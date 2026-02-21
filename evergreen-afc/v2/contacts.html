@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Book - Evergreen AFC</title>
+    <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
+    <style>
+        :root {
+            --primary: #2e7d32;
+            --primary-light: #4caf50;
+            --primary-dark: #1b5e20;
+            --accent: #81c784;
+            --bg: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%);
+            --card-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            --success: #43a047;
+            --warning: #ff9800;
+            --error: #e53935;
+            --text: #333;
+            --text-light: #666;
+            --border: #e0e0e0;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: var(--bg); 
+            min-height: 100vh; 
+            padding: 20px;
+            color: var(--text);
+        }
+        
+        .container { max-width: 900px; margin: 0 auto; }
+        
+        /* Header */
+        .header-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--card-shadow);
+            border-top: 4px solid var(--primary);
+        }
+        .header-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .logo { height: 48px; width: auto; border-radius: 8px; }
+        .brand-info h2 { color: var(--primary-dark); font-size: 18px; font-weight: 700; }
+        .brand-info span { color: var(--text-light); font-size: 13px; }
+        h1 { 
+            margin-top: 20px; 
+            color: var(--primary-dark); 
+            font-size: 28px; 
+            display: flex; 
+            align-items: center; 
+            gap: 12px;
+            font-weight: 700;
+        }
+        
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--card-shadow);
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* Centralized Notice */
+        .sync-notice {
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        /* Search Bar */
+        .search-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .search-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px 16px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.2s;
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.1);
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(46, 125, 50, 0.3);
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(46, 125, 50, 0.4);
+        }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .btn-secondary { background: #f5f5f5; color: var(--text); }
+        .btn-secondary:hover { background: #e8e8e8; }
+        .btn-danger { background: #ffebee; color: var(--error); }
+        .btn-danger:hover { background: #ffcdd2; }
+        .btn-small { padding: 8px 14px; font-size: 13px; }
+        
+        /* Contact List */
+        .contact-list { display: grid; gap: 12px; }
+        .contact-item {
+            display: flex;
+            align-items: center;
+            padding: 16px 20px;
+            background: #fafafa;
+            border-radius: 12px;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .contact-item:hover {
+            background: #f0f7f0;
+            border-color: var(--accent);
+        }
+        .contact-avatar {
+            width: 48px;
+            height: 48px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            margin-right: 16px;
+            flex-shrink: 0;
+        }
+        .contact-info { flex: 1; min-width: 0; }
+        .contact-name { font-weight: 700; font-size: 16px; color: var(--text); }
+        .contact-number { font-size: 14px; color: var(--text-light); margin-top: 2px; }
+        .contact-org { font-size: 12px; color: var(--primary); margin-top: 2px; }
+        .contact-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .modal-overlay.visible { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: modalIn 0.2s ease;
+        }
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-title { font-size: 20px; font-weight: 700; color: var(--primary-dark); }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-light);
+        }
+        .modal-close:hover { color: var(--text); }
+        
+        /* Form */
+        .form-group { margin-bottom: 16px; }
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .form-input:focus { outline: none; border-color: var(--primary); }
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-light);
+        }
+        .empty-state-icon { font-size: 64px; margin-bottom: 16px; }
+        
+        /* Loading */
+        .loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: var(--text-light); }
+        .spinner { width: 40px; height: 40px; border: 4px solid #f0f0f0; border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Stats */
+        .stats-bar { display: flex; gap: 20px; margin-top: 12px; }
+        .stat { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-light); }
+        .stat-value { font-weight: 700; color: var(--primary); }
+        
+        /* Tech Support */
+        .support-link {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--primary);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 20px rgba(46, 125, 50, 0.4);
+            transition: all 0.2s;
+            z-index: 100;
+        }
+        .support-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(46, 125, 50, 0.5);
+        }
+        
+        /* Footer */
+        .powered-by {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 20px;
+            font-size: 12px;
+            color: var(--text-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .powered-by a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .lnt-logo { height: 20px; width: auto; }
+        
+        /* Responsive */
+        @media (max-width: 600px) {
+            .contact-item { flex-direction: column; text-align: center; }
+            .contact-avatar { margin-right: 0; margin-bottom: 12px; }
+            .contact-actions { margin-top: 12px; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-card">
+            <div class="header-top">
+                <div class="brand">
+                    <img src="https://logicnetworkstech.github.io/MSP-client-apps/evergreen-afc/v2/assets/evergreen-logo.jpg" alt="Evergreen AFC" class="logo" onerror="this.style.display='none'">
+                    <div class="brand-info">
+                        <h2>Evergreen AFC</h2>
+                        <span>eFax Portal</span>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="openAddModal()">+ Add Contact</button>
+            </div>
+            <h1>📒 Contact Book</h1>
+            <div class="stats-bar">
+                <div class="stat">Total Contacts: <span class="stat-value" id="totalCount">0</span></div>
+            </div>
+        </div>
+
+        <div class="sync-notice">
+            <span>☁️</span>
+            <span>Contacts are shared across all users in your organization</span>
+        </div>
+
+        <div class="search-bar">
+            <input type="text" class="search-input" id="searchInput" placeholder="Search contacts by name, number, or organization..." oninput="filterContacts()">
+            <button class="btn btn-secondary" onclick="loadContacts()">Refresh</button>
+        </div>
+
+        <div class="card">
+            <div id="contactList" class="contact-list">
+                <div class="loading"><div class="spinner"></div> Loading contacts...</div>
+            </div>
+        </div>
+        
+        <div class="powered-by">
+            Powered by <a href="https://logicnetworks.us" target="_blank">
+                <img src="https://logicnetworkstech.github.io/MSP-client-apps/evergreen-afc/v2/assets/lnt-gear.png" alt="LNT" class="lnt-logo" onerror="this.style.display='none'">
+                Logic Networks
+            </a>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal-overlay" id="contactModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">Add Contact</h3>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <form id="contactForm" onsubmit="saveContact(event)">
+                <input type="hidden" id="editId" value="">
+                <div class="form-group">
+                    <label class="form-label">Name *</label>
+                    <input type="text" class="form-input" id="contactName" placeholder="Dr. Smith" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fax Number *</label>
+                    <input type="tel" class="form-input" id="contactNumber" placeholder="(555) 123-4567" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Organization</label>
+                    <input type="text" class="form-input" id="contactOrg" placeholder="Tufts Medicine">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" id="contactEmail" placeholder="doctor@example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-input" id="contactNotes" rows="3" placeholder="Additional notes..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveBtn">Save Contact</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tech Support Link -->
+    <a href="mailto:support@logicnetworks.us?subject=eFax Support Request - Evergreen AFC" class="support-link">
+        Tech Support
+    </a>
+
+    <script>
+        microsoftTeams.app.initialize();
+
+        const CONFIG = {
+            proxyUrl: 'https://srfax-proxy.nbalbi.workers.dev',
+            clientId: 'EVERGREEN'
+        };
+
+        let contacts = [];
+        let filteredContacts = [];
+
+        // Load contacts on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadContacts();
+            setupPhoneFormat();
+        });
+
+        // Phone formatting
+        function setupPhoneFormat() {
+            const input = document.getElementById('contactNumber');
+            input.addEventListener('input', (e) => {
+                let val = e.target.value.replace(/\D/g, '');
+                if (val.length > 0) {
+                    if (val.length <= 3) val = `(${val}`;
+                    else if (val.length <= 6) val = `(${val.slice(0,3)}) ${val.slice(3)}`;
+                    else val = `(${val.slice(0,3)}) ${val.slice(3,6)}-${val.slice(6,10)}`;
+                }
+                e.target.value = val;
+            });
+        }
+
+        // Load contacts from server (centralized)
+        async function loadContacts() {
+            document.getElementById('contactList').innerHTML = '<div class="loading"><div class="spinner"></div> Loading contacts...</div>';
+            
+            try {
+                const response = await fetch(`${CONFIG.proxyUrl}/contacts`, {
+                    headers: { 'X-Client-ID': CONFIG.clientId }
+                });
+                const data = await response.json();
+                contacts = data.contacts || [];
+                filterContacts();
+                updateStats();
+            } catch (error) {
+                console.error('Error loading contacts:', error);
+                document.getElementById('contactList').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚠️</div>
+                        <p>Error loading contacts. Please try again.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function filterContacts() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            filteredContacts = contacts.filter(c => 
+                c.name.toLowerCase().includes(search) ||
+                c.number.toLowerCase().includes(search) ||
+                (c.org || '').toLowerCase().includes(search)
+            );
+            renderContacts();
+        }
+
+        function renderContacts() {
+            const container = document.getElementById('contactList');
+            
+            if (filteredContacts.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📒</div>
+                        <p>${contacts.length === 0 ? 'No contacts yet. Add your first contact!' : 'No contacts match your search.'}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filteredContacts.map(c => {
+                const initials = c.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                return `
+                    <div class="contact-item">
+                        <div class="contact-avatar">${initials}</div>
+                        <div class="contact-info">
+                            <div class="contact-name">${escapeHtml(c.name)}</div>
+                            <div class="contact-number">📠 ${escapeHtml(c.number)}</div>
+                            ${c.org ? `<div class="contact-org">🏢 ${escapeHtml(c.org)}</div>` : ''}
+                        </div>
+                        <div class="contact-actions">
+                            <button class="btn btn-primary btn-small" onclick="sendFaxTo('${escapeHtml(c.number)}')">Send Fax</button>
+                            <button class="btn btn-secondary btn-small" onclick="editContact('${c.id}')">Edit</button>
+                            <button class="btn btn-danger btn-small" onclick="deleteContact('${c.id}', '${escapeHtml(c.name)}')">Delete</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('totalCount').textContent = contacts.length;
+        }
+
+        // Modal Functions
+        function openAddModal() {
+            document.getElementById('modalTitle').textContent = 'Add Contact';
+            document.getElementById('editId').value = '';
+            document.getElementById('contactForm').reset();
+            document.getElementById('contactModal').classList.add('visible');
+        }
+
+        function editContact(id) {
+            const c = contacts.find(contact => contact.id === id);
+            if (!c) return;
+            
+            document.getElementById('modalTitle').textContent = 'Edit Contact';
+            document.getElementById('editId').value = id;
+            document.getElementById('contactName').value = c.name;
+            document.getElementById('contactNumber').value = c.number;
+            document.getElementById('contactOrg').value = c.org || '';
+            document.getElementById('contactEmail').value = c.email || '';
+            document.getElementById('contactNotes').value = c.notes || '';
+            document.getElementById('contactModal').classList.add('visible');
+        }
+
+        function closeModal() {
+            document.getElementById('contactModal').classList.remove('visible');
+        }
+
+        async function saveContact(e) {
+            e.preventDefault();
+            
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            
+            const contact = {
+                name: document.getElementById('contactName').value.trim(),
+                number: document.getElementById('contactNumber').value.trim(),
+                org: document.getElementById('contactOrg').value.trim(),
+                email: document.getElementById('contactEmail').value.trim(),
+                notes: document.getElementById('contactNotes').value.trim()
+            };
+
+            const editId = document.getElementById('editId').value;
+            
+            try {
+                let response;
+                if (editId) {
+                    // Update existing contact
+                    response = await fetch(`${CONFIG.proxyUrl}/contacts/${editId}`, {
+                        method: 'PUT',
+                        headers: { 
+                            'X-Client-ID': CONFIG.clientId,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(contact)
+                    });
+                } else {
+                    // Add new contact
+                    response = await fetch(`${CONFIG.proxyUrl}/contacts`, {
+                        method: 'POST',
+                        headers: { 
+                            'X-Client-ID': CONFIG.clientId,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(contact)
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    closeModal();
+                    loadContacts(); // Refresh from server
+                } else {
+                    alert('Error saving contact: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error saving contact:', error);
+                alert('Error saving contact. Please try again.');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Contact';
+            }
+        }
+
+        async function deleteContact(id, name) {
+            if (!confirm(`Delete contact "${name}"? This will remove it for all users.`)) return;
+            
+            try {
+                const response = await fetch(`${CONFIG.proxyUrl}/contacts/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-Client-ID': CONFIG.clientId }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadContacts(); // Refresh from server
+                } else {
+                    alert('Error deleting contact: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error deleting contact:', error);
+                alert('Error deleting contact. Please try again.');
+            }
+        }
+
+        function sendFaxTo(number) {
+            // Navigate to send page with pre-filled number
+            const sendUrl = 'https://logicnetworkstech.github.io/MSP-client-apps/evergreen-afc/v2/send.html?to=' + encodeURIComponent(number);
+            window.location.href = sendUrl;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Close modal on overlay click
+        document.getElementById('contactModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('contactModal')) {
+                closeModal();
+            }
+        });
+
+        // Close modal on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+    </script>
+</body>
+</html>
