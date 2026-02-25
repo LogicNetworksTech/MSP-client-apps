@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - Evergreen AFC eFax</title>
+    <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        :root {
+            --primary: #2e7d32;
+            --primary-light: #4caf50;
+            --primary-dark: #1b5e20;
+            --accent: #81c784;
+            --bg: linear-gradient(135deg, #f5f7fa 0%, #e8f5e9 100%);
+            --card-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            --success: #43a047;
+            --warning: #ff9800;
+            --error: #e53935;
+            --info: #2196f3;
+            --text: #333;
+            --text-light: #666;
+            --border: #e0e0e0;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: var(--bg); 
+            min-height: 100vh; 
+            padding: 20px;
+            color: var(--text);
+        }
+        
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        /* Header */
+        .header-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--card-shadow);
+            border-top: 4px solid var(--primary);
+        }
+        .header-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .logo { height: 48px; width: auto; border-radius: 8px; }
+        .brand-info h2 { color: var(--primary-dark); font-size: 18px; font-weight: 700; }
+        .brand-info span { color: var(--text-light); font-size: 13px; }
+        h1 { 
+            margin-top: 20px; 
+            color: var(--primary-dark); 
+            font-size: 28px; 
+            display: flex; 
+            align-items: center; 
+            gap: 12px;
+            font-weight: 700;
+        }
+        
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .period-selector {
+            display: flex;
+            background: #f5f5f5;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .period-btn {
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-light);
+        }
+        .period-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+        .period-btn:hover:not(.active) { background: #e8e8e8; }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            color: white;
+        }
+        .btn-primary:hover { transform: translateY(-1px); }
+        .btn-secondary { background: #f5f5f5; color: var(--text); }
+        .btn-secondary:hover { background: #e8e8e8; }
+        
+        /* KPI Cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .kpi-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--card-shadow);
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        .kpi-card:hover { transform: translateY(-2px); }
+        .kpi-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-light); margin-bottom: 8px; }
+        .kpi-value { font-size: 32px; font-weight: 700; }
+        .kpi-value.success { color: var(--success); }
+        .kpi-value.warning { color: var(--warning); }
+        .kpi-value.error { color: var(--error); }
+        .kpi-value.info { color: var(--info); }
+        .kpi-value.primary { color: var(--primary); }
+        .kpi-sub { font-size: 13px; color: var(--text-light); margin-top: 4px; }
+        .kpi-percent { font-size: 14px; font-weight: 600; }
+        
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--card-shadow);
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        /* Charts */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+        
+        /* Table */
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .report-table th {
+            text-align: left;
+            padding: 12px 16px;
+            background: #f5f5f5;
+            font-weight: 600;
+            color: var(--text);
+            border-bottom: 2px solid var(--border);
+        }
+        .report-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .report-table tr:hover td { background: #fafafa; }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .status-badge.success { background: #e8f5e9; color: var(--success); }
+        .status-badge.error { background: #ffebee; color: var(--error); }
+        .status-badge.pending { background: #fff8e1; color: var(--warning); }
+        
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 60px;
+            color: var(--text-light);
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f0f0f0;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Date Range Display */
+        .date-range {
+            background: #f5f5f5;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--text-light);
+        }
+        
+        /* Tech Support */
+        .support-link {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--primary);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 20px rgba(46, 125, 50, 0.4);
+            transition: all 0.2s;
+            z-index: 100;
+        }
+        .support-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(46, 125, 50, 0.5);
+        }
+        
+        /* Footer */
+        .powered-by {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 20px;
+            font-size: 12px;
+            color: var(--text-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .powered-by a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .lnt-logo { height: 20px; width: auto; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .charts-grid { grid-template-columns: 1fr; }
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+            .controls { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-card">
+            <div class="header-top">
+                <div class="brand">
+                    <img src="https://logicnetworkstech.github.io/MSP-client-apps/evergreen-afc/v2/assets/evergreen-logo.jpg" alt="Evergreen AFC" class="logo" onerror="this.style.display='none'">
+                    <div class="brand-info">
+                        <h2>Evergreen AFC</h2>
+                        <span>eFax Portal</span>
+                    </div>
+                </div>
+                <div class="controls">
+                    <div class="period-selector">
+                        <button class="period-btn" data-days="30" onclick="setPeriod(30)">30 Days</button>
+                        <button class="period-btn active" data-days="60" onclick="setPeriod(60)">60 Days</button>
+                        <button class="period-btn" data-days="90" onclick="setPeriod(90)">90 Days</button>
+                    </div>
+                    <span class="date-range" id="dateRange">Loading...</span>
+                </div>
+            </div>
+            <h1>📊 Fax Reports & Analytics</h1>
+            <div style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="exportPDF()">📄 Export PDF</button>
+                <button class="btn btn-secondary" onclick="exportCSV()">📊 Export CSV</button>
+                <button class="btn btn-secondary" onclick="refreshData()">🔄 Refresh</button>
+            </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="kpi-grid" id="kpiGrid">
+            <div class="kpi-card">
+                <div class="kpi-label">Total Sent</div>
+                <div class="kpi-value primary" id="kpiTotalSent">-</div>
+                <div class="kpi-sub">outbound faxes</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Delivered</div>
+                <div class="kpi-value success" id="kpiDelivered">-</div>
+                <div class="kpi-sub" id="kpiDeliveredPercent">-</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Failed</div>
+                <div class="kpi-value error" id="kpiFailed">-</div>
+                <div class="kpi-sub" id="kpiFailedPercent">-</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Received</div>
+                <div class="kpi-value info" id="kpiReceived">-</div>
+                <div class="kpi-sub">inbound faxes</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Total Pages</div>
+                <div class="kpi-value primary" id="kpiPages">-</div>
+                <div class="kpi-sub">pages transmitted</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Avg. Per Day</div>
+                <div class="kpi-value warning" id="kpiAvgDay">-</div>
+                <div class="kpi-sub">faxes / day</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="card">
+                <div class="card-title">
+                    📈 Fax Volume Over Time
+                </div>
+                <div class="chart-container">
+                    <canvas id="volumeChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">
+                    📊 Status Breakdown
+                </div>
+                <div class="chart-container">
+                    <canvas id="statusChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                📋 Top Recipients
+                <span style="font-weight: normal; font-size: 13px; color: var(--text-light);">Most frequently faxed numbers</span>
+            </div>
+            <div class="chart-container" style="height: 250px;">
+                <canvas id="recipientsChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Activity Table -->
+        <div class="card">
+            <div class="card-title">
+                🕐 Recent Activity
+                <span style="font-weight: normal; font-size: 13px; color: var(--text-light);" id="activityCount">Last 20 faxes</span>
+            </div>
+            <div style="overflow-x: auto;">
+                <table class="report-table" id="activityTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Number</th>
+                            <th>Pages</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activityBody">
+                        <tr><td colspan="5" class="loading"><div class="spinner"></div> Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="powered-by">
+            Powered by <a href="https://logicnetworks.us" target="_blank">
+                <img src="https://logicnetworkstech.github.io/MSP-client-apps/evergreen-afc/v2/assets/lnt-gear.png" alt="LNT" class="lnt-logo" onerror="this.style.display='none'">
+                Logic Networks
+            </a>
+        </div>
+    </div>
+
+    <!-- Tech Support Link -->
+    <a href="mailto:support@logicnetworks.us?subject=eFax Support Request - Evergreen AFC" class="support-link">
+        🛟 Tech Support
+    </a>
+
+    <script>
+        microsoftTeams.app.initialize();
+
+        const CONFIG = {
+            proxyUrl: 'https://srfax-proxy.nbalbi.workers.dev',
+            clientId: 'EVERGREEN'
+        };
+
+        let currentDays = 60;
+        let reportData = { inbound: [], outbound: [] };
+        let volumeChart, statusChart, recipientsChart;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            loadReportData();
+        });
+
+        function setPeriod(days) {
+            currentDays = days;
+            document.querySelectorAll('.period-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.days) === days);
+            });
+            loadReportData();
+        }
+
+        async function loadReportData() {
+            updateDateRange();
+            
+            try {
+                // Fetch inbound and outbound faxes
+                const [inbound, outbound] = await Promise.all([
+                    fetchFaxes('Inbox', currentDays),
+                    fetchFaxes('Outbox', currentDays)
+                ]);
+                
+                reportData = { inbound, outbound };
+                
+                updateKPIs();
+                updateCharts();
+                updateActivityTable();
+            } catch (error) {
+                console.error('Error loading report data:', error);
+            }
+        }
+
+        async function fetchFaxes(direction, days) {
+            const formData = new FormData();
+            formData.append('action', 'Get_Fax_' + direction);
+            formData.append('sPeriod', 'RANGE');
+            
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            
+            formData.append('sStartDate', formatDateAPI(startDate));
+            formData.append('sEndDate', formatDateAPI(endDate));
+            formData.append('sIncludeSubUsers', 'Y');
+            
+            const response = await fetch(CONFIG.proxyUrl, {
+                method: 'POST',
+                headers: { 'X-Client-ID': CONFIG.clientId },
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.Status === 'Success' && Array.isArray(data.Result)) {
+                return data.Result;
+            }
+            return [];
+        }
+
+        function formatDateAPI(date) {
+            return date.toISOString().split('T')[0].replace(/-/g, '');
+        }
+
+        function updateDateRange() {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - currentDays);
+            
+            const opts = { month: 'short', day: 'numeric', year: 'numeric' };
+            document.getElementById('dateRange').textContent = 
+                `${startDate.toLocaleDateString('en-US', opts)} - ${endDate.toLocaleDateString('en-US', opts)}`;
+        }
+
+        function updateKPIs() {
+            const inbound = reportData.inbound;
+            const outbound = reportData.outbound;
+            
+            const totalSent = outbound.length;
+            const delivered = outbound.filter(f => f.SentStatus === 'Sent').length;
+            const failed = outbound.filter(f => f.SentStatus === 'Failed').length;
+            const received = inbound.length;
+            
+            // Calculate total pages
+            let totalPages = 0;
+            outbound.forEach(f => totalPages += parseInt(f.Pages) || 0);
+            inbound.forEach(f => totalPages += parseInt(f.Pages) || 0);
+            
+            const avgPerDay = ((totalSent + received) / currentDays).toFixed(1);
+            
+            document.getElementById('kpiTotalSent').textContent = totalSent;
+            document.getElementById('kpiDelivered').textContent = delivered;
+            document.getElementById('kpiDeliveredPercent').textContent = totalSent > 0 ? 
+                `${((delivered / totalSent) * 100).toFixed(1)}% success rate` : '-';
+            document.getElementById('kpiFailed').textContent = failed;
+            document.getElementById('kpiFailedPercent').textContent = totalSent > 0 ? 
+                `${((failed / totalSent) * 100).toFixed(1)}% failure rate` : '-';
+            document.getElementById('kpiReceived').textContent = received;
+            document.getElementById('kpiPages').textContent = totalPages;
+            document.getElementById('kpiAvgDay').textContent = avgPerDay;
+        }
+
+        function initCharts() {
+            // Volume Chart
+            const volumeCtx = document.getElementById('volumeChart').getContext('2d');
+            volumeChart = new Chart(volumeCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Sent',
+                            data: [],
+                            borderColor: '#2e7d32',
+                            backgroundColor: 'rgba(46, 125, 50, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Received',
+                            data: [],
+                            borderColor: '#2196f3',
+                            backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        tooltip: {
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            titleFont: { size: 14, weight: 'bold' },
+                            bodyFont: { size: 13 },
+                            callbacks: {
+                                title: (items) => items[0].label,
+                                afterBody: (items) => {
+                                    const total = items.reduce((sum, item) => sum + item.parsed.y, 0);
+                                    return `\nTotal: ${total} faxes`;
+                                }
+                            }
+                        },
+                        legend: {
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        }
+                    }
+                }
+            });
+
+            // Status Chart
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            statusChart = new Chart(statusCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Delivered', 'Failed', 'Pending'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#43a047', '#e53935', '#ff9800'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: {
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            callbacks: {
+                                label: (context) => {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percent = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : 0;
+                                    return `${context.label}: ${context.parsed} (${percent}%)`;
+                                }
+                            }
+                        },
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+
+            // Recipients Chart
+            const recipientsCtx = document.getElementById('recipientsChart').getContext('2d');
+            recipientsChart = new Chart(recipientsCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Faxes Sent',
+                        data: [],
+                        backgroundColor: '#4caf50',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        tooltip: {
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            callbacks: {
+                                label: (context) => `${context.parsed.x} faxes sent`
+                            }
+                        },
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCharts() {
+            // Volume by date
+            const volumeByDate = {};
+            const inboundByDate = {};
+            
+            reportData.outbound.forEach(fax => {
+                const date = fax.EpochTime ? new Date(fax.EpochTime * 1000).toLocaleDateString() : 
+                             fax.Date || 'Unknown';
+                volumeByDate[date] = (volumeByDate[date] || 0) + 1;
+            });
+            
+            reportData.inbound.forEach(fax => {
+                const date = fax.EpochTime ? new Date(fax.EpochTime * 1000).toLocaleDateString() : 
+                             fax.Date || 'Unknown';
+                inboundByDate[date] = (inboundByDate[date] || 0) + 1;
+            });
+            
+            // Get all dates and sort
+            const allDates = [...new Set([...Object.keys(volumeByDate), ...Object.keys(inboundByDate)])].sort((a, b) => new Date(a) - new Date(b));
+            
+            volumeChart.data.labels = allDates.slice(-30); // Last 30 days for readability
+            volumeChart.data.datasets[0].data = allDates.slice(-30).map(d => volumeByDate[d] || 0);
+            volumeChart.data.datasets[1].data = allDates.slice(-30).map(d => inboundByDate[d] || 0);
+            volumeChart.update();
+            
+            // Status breakdown
+            const delivered = reportData.outbound.filter(f => f.SentStatus === 'Sent').length;
+            const failed = reportData.outbound.filter(f => f.SentStatus === 'Failed').length;
+            const pending = reportData.outbound.filter(f => !['Sent', 'Failed'].includes(f.SentStatus)).length;
+            
+            statusChart.data.datasets[0].data = [delivered, failed, pending];
+            statusChart.update();
+            
+            // Top recipients
+            const recipientCounts = {};
+            reportData.outbound.forEach(fax => {
+                const num = fax.ToFaxNumber || fax.DestinationFaxNumber || 'Unknown';
+                recipientCounts[num] = (recipientCounts[num] || 0) + 1;
+            });
+            
+            const topRecipients = Object.entries(recipientCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8);
+            
+            recipientsChart.data.labels = topRecipients.map(r => formatPhone(r[0]));
+            recipientsChart.data.datasets[0].data = topRecipients.map(r => r[1]);
+            recipientsChart.update();
+        }
+
+        function updateActivityTable() {
+            const all = [
+                ...reportData.outbound.map(f => ({ ...f, type: 'Sent' })),
+                ...reportData.inbound.map(f => ({ ...f, type: 'Received' }))
+            ].sort((a, b) => (b.EpochTime || 0) - (a.EpochTime || 0)).slice(0, 20);
+            
+            const tbody = document.getElementById('activityBody');
+            
+            if (all.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-light);">No fax activity in selected period</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = all.map(fax => {
+                const date = fax.EpochTime ? new Date(fax.EpochTime * 1000).toLocaleString() : (fax.Date || '-');
+                const number = fax.type === 'Sent' ? (fax.ToFaxNumber || fax.DestinationFaxNumber || '-') : (fax.CallerID || '-');
+                const pages = fax.Pages || '-';
+                const status = fax.type === 'Sent' ? (fax.SentStatus || 'Pending') : 'Received';
+                const statusClass = status === 'Sent' || status === 'Received' ? 'success' : status === 'Failed' ? 'error' : 'pending';
+                
+                return `
+                    <tr>
+                        <td>${date}</td>
+                        <td>${fax.type === 'Sent' ? '📤' : '📥'} ${fax.type}</td>
+                        <td>${formatPhone(number)}</td>
+                        <td>${pages}</td>
+                        <td><span class="status-badge ${statusClass}">${status}</span></td>
+                    </tr>
+                `;
+            }).join('');
+            
+            document.getElementById('activityCount').textContent = `Last ${all.length} faxes`;
+        }
+
+        function formatPhone(num) {
+            const cleaned = ('' + num).replace(/\D/g, '');
+            const match = cleaned.match(/^(\d{1})?(\d{3})(\d{3})(\d{4})$/);
+            if (match) {
+                return match[1] ? `+${match[1]} (${match[2]}) ${match[3]}-${match[4]}` : `(${match[2]}) ${match[3]}-${match[4]}`;
+            }
+            return num;
+        }
+
+        function refreshData() {
+            loadReportData();
+        }
+
+        // Export Functions
+        function exportPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // Title
+            doc.setFontSize(20);
+            doc.setTextColor(46, 125, 50);
+            doc.text('Evergreen AFC - Fax Report', 14, 22);
+            
+            // Date range
+            doc.setFontSize(11);
+            doc.setTextColor(100);
+            doc.text(`Report Period: ${document.getElementById('dateRange').textContent}`, 14, 32);
+            doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 38);
+            
+            // KPIs
+            doc.setFontSize(14);
+            doc.setTextColor(0);
+            doc.text('Summary Statistics', 14, 52);
+            
+            const kpis = [
+                ['Total Sent', document.getElementById('kpiTotalSent').textContent],
+                ['Delivered', document.getElementById('kpiDelivered').textContent],
+                ['Failed', document.getElementById('kpiFailed').textContent],
+                ['Received', document.getElementById('kpiReceived').textContent],
+                ['Total Pages', document.getElementById('kpiPages').textContent],
+                ['Avg. Per Day', document.getElementById('kpiAvgDay').textContent]
+            ];
+            
+            doc.autoTable({
+                startY: 56,
+                head: [['Metric', 'Value']],
+                body: kpis,
+                theme: 'striped',
+                headStyles: { fillColor: [46, 125, 50] }
+            });
+            
+            // Activity table
+            doc.setFontSize(14);
+            doc.text('Recent Activity', 14, doc.lastAutoTable.finalY + 15);
+            
+            const activityData = [];
+            document.querySelectorAll('#activityBody tr').forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length === 5) {
+                    activityData.push([
+                        cells[0].textContent,
+                        cells[1].textContent.replace(/📤|📥/g, '').trim(),
+                        cells[2].textContent,
+                        cells[3].textContent,
+                        cells[4].textContent
+                    ]);
+                }
+            });
+            
+            doc.autoTable({
+                startY: doc.lastAutoTable.finalY + 20,
+                head: [['Date', 'Type', 'Number', 'Pages', 'Status']],
+                body: activityData,
+                theme: 'striped',
+                headStyles: { fillColor: [46, 125, 50] }
+            });
+            
+            // Footer
+            doc.setFontSize(10);
+            doc.setTextColor(150);
+            doc.text('Powered by Logic Networks - logicnetworks.us', 14, doc.internal.pageSize.height - 10);
+            
+            doc.save(`Evergreen-AFC-Fax-Report-${new Date().toISOString().split('T')[0]}.pdf`);
+        }
+
+        function exportCSV() {
+            const all = [
+                ...reportData.outbound.map(f => ({ ...f, type: 'Sent' })),
+                ...reportData.inbound.map(f => ({ ...f, type: 'Received' }))
+            ].sort((a, b) => (b.EpochTime || 0) - (a.EpochTime || 0));
+            
+            const headers = ['Date', 'Type', 'Number', 'Pages', 'Status', 'Duration'];
+            const rows = all.map(fax => {
+                const date = fax.EpochTime ? new Date(fax.EpochTime * 1000).toISOString() : (fax.Date || '');
+                const number = fax.type === 'Sent' ? (fax.ToFaxNumber || fax.DestinationFaxNumber || '') : (fax.CallerID || '');
+                const pages = fax.Pages || '';
+                const status = fax.type === 'Sent' ? (fax.SentStatus || 'Pending') : 'Received';
+                const duration = fax.Duration || '';
+                return [date, fax.type, number, pages, status, duration].map(v => `"${v}"`).join(',');
+            });
+            
+            const csv = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Evergreen-AFC-Fax-Report-${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
