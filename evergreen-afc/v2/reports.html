@@ -412,6 +412,7 @@
 
         const CONFIG = {
             proxyUrl: 'https://srfax-proxy.nbalbi.workers.dev',
+            archiveProxyUrl: 'https://srfax-archive-proxy.nbalbi.workers.dev',
             clientId: 'EVERGREEN'
         };
 
@@ -454,6 +455,15 @@
         }
 
         async function fetchFaxes(direction, days) {
+            const [liveFaxes, archiveFaxes] = await Promise.all([
+                fetchLiveFaxes(direction, days),
+                fetchArchiveFaxes(direction, days)
+            ]);
+
+            return mergeReportFaxes(liveFaxes, archiveFaxes);
+        }
+
+        async function fetchLiveFaxes(direction, days) {
             const formData = new FormData();
             formData.append('action', 'Get_Fax_' + direction);
             formData.append('sPeriod', 'RANGE');
@@ -478,6 +488,56 @@
                 return data.Result;
             }
             return [];
+        }
+
+        async function fetchArchiveFaxes(direction, days) {
+            try {
+                const formData = new FormData();
+                formData.append('action', 'Archive_List');
+                formData.append('direction', direction.toLowerCase() === 'inbox' ? 'inbox' : 'outbox');
+
+                const response = await fetch(CONFIG.archiveProxyUrl, {
+                    method: 'POST',
+                    headers: { 'X-Client-ID': CONFIG.clientId },
+                    body: formData
+                });
+
+                const data = await response.json();
+                const records = (data.Status === 'Success' && Array.isArray(data.Result)) ? data.Result : [];
+                return records.filter(fax => isFaxInCurrentPeriod(fax, days));
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function mergeReportFaxes(liveFaxes, archiveFaxes) {
+            // SRFax email notifications overlap recent live API rows. For reports,
+            // live SRFax is authoritative for any day where live data exists; archive
+            // rows fill older days only, preventing inflated 30/60/90-day counts.
+            const liveDays = new Set(liveFaxes.map(getFaxDayKey).filter(Boolean));
+            const archiveFill = archiveFaxes.filter(fax => !liveDays.has(getFaxDayKey(fax)));
+            return [...liveFaxes, ...archiveFill].sort((a, b) => getFaxEpochMs(b) - getFaxEpochMs(a));
+        }
+
+        function getFaxEpochMs(fax) {
+            if (fax.EpochTime) return Number(fax.EpochTime) * 1000;
+            const parsed = Date.parse(fax.Date || fax.DateSent || '');
+            return Number.isNaN(parsed) ? 0 : parsed;
+        }
+
+        function getFaxDayKey(fax) {
+            const epochMs = getFaxEpochMs(fax);
+            if (!epochMs) return '';
+            return new Date(epochMs).toISOString().slice(0, 10);
+        }
+
+        function isFaxInCurrentPeriod(fax, days) {
+            const epochMs = getFaxEpochMs(fax);
+            if (!epochMs) return false;
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            startDate.setHours(0, 0, 0, 0);
+            return epochMs >= startDate.getTime();
         }
 
         function formatDateAPI(date) {
