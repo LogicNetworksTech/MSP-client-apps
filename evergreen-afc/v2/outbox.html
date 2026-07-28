@@ -73,6 +73,7 @@
         .action-btn:hover { transform: translateY(-1px); }
         .action-btn.secondary { background: #f5f5f5; color: var(--text); }
         .action-btn.secondary:hover { background: #e0e0e0; }
+        .archive-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #eef5ff; color: #1f5f9f; font-size: 11px; font-weight: 700; text-transform: uppercase; }
         
         /* Pagination */
         .pagination { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
@@ -201,6 +202,7 @@
 
         const CONFIG = {
             proxyUrl: 'https://srfax-proxy.nbalbi.workers.dev',
+            archiveProxyUrl: 'https://srfax-archive-proxy.nbalbi.workers.dev',
             clientId: 'EVERGREEN'
         };
 
@@ -228,8 +230,11 @@
 
                 const data = await response.json();
 
-                if (data.Status === 'Success' && Array.isArray(data.Result)) {
-                    allFaxes = data.Result;
+                const liveFaxes = (data.Status === 'Success' && Array.isArray(data.Result)) ? data.Result : [];
+                const archiveFaxes = await loadArchive('outbox');
+
+                if (liveFaxes.length || archiveFaxes.length) {
+                    allFaxes = mergeAndSortFaxes(liveFaxes, archiveFaxes);
                     filterFaxes();
                     updateStats();
                 } else {
@@ -238,6 +243,35 @@
             } catch (error) {
                 document.getElementById('faxList').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Error loading faxes: ' + error.message + '</p></div>';
             }
+        }
+
+        async function loadArchive(direction) {
+            try {
+                const formData = new FormData();
+                formData.append('action', 'Archive_List');
+                formData.append('direction', direction);
+
+                const response = await fetch(CONFIG.archiveProxyUrl, {
+                    method: 'POST',
+                    headers: { 'X-Client-ID': CONFIG.clientId },
+                    body: formData
+                });
+
+                const data = await response.json();
+                return (data.Status === 'Success' && Array.isArray(data.Result)) ? data.Result : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function mergeAndSortFaxes(liveFaxes, archiveFaxes) {
+            return [...liveFaxes, ...archiveFaxes].sort((a, b) => getFaxTime(b) - getFaxTime(a));
+        }
+
+        function getFaxTime(fax) {
+            if (fax.EpochTime) return Number(fax.EpochTime) * 1000;
+            const parsed = Date.parse(fax.Date || '');
+            return Number.isNaN(parsed) ? 0 : parsed;
         }
 
         function refreshOutbox() {
@@ -262,12 +296,13 @@
             const statusFilter = document.getElementById('statusFilter').value;
 
             filteredFaxes = allFaxes.filter(fax => {
-                const toNum = fax.ToFaxNumber || fax.DestinationFaxNumber || '';
+                const toNum = fax.ToFaxNumber || fax.DestinationFaxNumber || fax.RemoteDisplay || '';
                 const matchSearch = !search || toNum.toLowerCase().includes(search);
 
                 let matchDate = true;
-                if (dateFilter !== 'all' && fax.Date) {
-                    const faxDate = new Date(fax.Date);
+                if (dateFilter !== 'all') {
+                    const faxDate = new Date(getFaxTime(fax));
+                    if (Number.isNaN(faxDate.getTime())) return false;
                     const today = new Date();
                     if (dateFilter === 'today') matchDate = faxDate.toDateString() === today.toDateString();
                     else if (dateFilter === 'week') {
@@ -302,21 +337,24 @@
                 return;
             }
 
-            container.innerHTML = pageFaxes.map(fax => {
-                const toNum = fax.ToFaxNumber || fax.DestinationFaxNumber || 'Unknown';
+            container.innerHTML = pageFaxes.map((fax, offset) => {
+                const faxIndex = start + offset;
+                const toNum = fax.ToFaxNumber || fax.DestinationFaxNumber || fax.RemoteDisplay || 'Unknown';
                 const status = fax.SentStatus || 'Pending';
                 const statusClass = status === 'Sent' ? 'sent' : status === 'Failed' ? 'failed' : 'pending';
                 const statusText = status === 'Sent' ? 'Delivered' : status;
+                const archiveBadge = fax.ArchiveRecord ? '<span class="archive-badge">Archived</span>' : '';
+                const hasPreview = !fax.ArchiveRecord || fax.PreviewAvailable;
                 
                 // Get failure reason if available
                 const errorReason = getErrorReason(fax);
-                const showRetry = status === 'Failed';
+                const showRetry = status === 'Failed' && !fax.ArchiveRecord;
 
                 return `
                     <div class="fax-item">
                         <span class="fax-icon">${status === 'Failed' ? '❌' : status === 'Sent' ? '✅' : '⏳'}</span>
                         <div class="fax-details">
-                            <div class="fax-to">To: ${formatPhone(toNum)}</div>
+                            <div class="fax-to">To: ${formatPhone(toNum)}${archiveBadge}</div>
                             <div class="fax-date">${fax.Date || 'Unknown date'} ${fax.EpochTime ? '• ' + new Date(fax.EpochTime * 1000).toLocaleTimeString() : ''}</div>
                             ${errorReason ? `<div class="fax-error">⚠️ ${errorReason}</div>` : ''}
                         </div>
@@ -324,8 +362,8 @@
                         <span class="fax-status ${statusClass}">${statusText}</span>
                         <div class="fax-actions">
                             ${showRetry ? `<button class="action-btn retry-btn" onclick="retryFax('${fax.FileName}', '${toNum}')">🔄 Retry</button>` : ''}
-                            <button class="action-btn" onclick="downloadFax('${fax.FileName}')">Download</button>
-                            <button class="action-btn secondary" onclick="previewFax('${fax.FileName}', '${formatPhone(toNum)}')">Preview</button>
+                            <button class="action-btn" onclick="downloadFaxByIndex(${faxIndex})" ${hasPreview ? '' : 'disabled'}>Download</button>
+                            <button class="action-btn secondary" onclick="previewFaxByIndex(${faxIndex})" ${hasPreview ? '' : 'disabled'}>Preview</button>
                         </div>
                     </div>
                 `;
@@ -480,77 +518,90 @@
             return num;
         }
 
-        async function downloadFax(fileName) {
+        async function retrieveFaxData(fax, direction) {
+            const formData = new FormData();
+            if (fax.ArchiveRecord) {
+                if (!fax.PreviewAvailable || !fax.ArchivePrimaryBlobKey) {
+                    throw new Error('No fax attachment was available in this archived notification');
+                }
+                formData.append('action', 'Archive_Retrieve');
+                formData.append('archiveId', fax.ArchiveId);
+                formData.append('blobKey', fax.ArchivePrimaryBlobKey);
+            } else {
+                formData.append('action', 'Retrieve_Fax');
+                formData.append('sFaxFileName', fax.FileName);
+                formData.append('sDirection', direction);
+                formData.append('sFaxFormat', 'PDF');
+            }
+
+            const response = await fetch(fax.ArchiveRecord ? CONFIG.archiveProxyUrl : CONFIG.proxyUrl, {
+                method: 'POST',
+                headers: { 'X-Client-ID': CONFIG.clientId },
+                body: formData
+            });
+
+            const data = await response.json();
+            if (data.Status === 'Success' && data.Result) return data.Result;
+            throw new Error(data.Result || 'Failed to load fax');
+        }
+
+        function archiveDownloadName(fax) {
+            if (!fax.ArchiveRecord) return fax.FileName.replace(/\.[^/.]+$/, '') + '.pdf';
+            const stamp = fax.EpochTime ? new Date(fax.EpochTime * 1000).toISOString().slice(0, 10) : 'archived';
+            return `archived-fax-${stamp}-${fax.ArchiveId.slice(0, 10)}.pdf`;
+        }
+
+        async function downloadFaxByIndex(index) {
+            const fax = filteredFaxes[index];
+            if (!fax) return;
+            await downloadFax(fax, event.target);
+        }
+
+        async function downloadFax(fax, btn) {
             try {
-                const btn = event.target;
                 btn.textContent = 'Loading...';
                 btn.disabled = true;
 
-                const formData = new FormData();
-                formData.append('action', 'Retrieve_Fax');
-                formData.append('sFaxFileName', fileName);
-                formData.append('sDirection', 'OUT');
-                formData.append('sFaxFormat', 'PDF');
-
-                const response = await fetch(CONFIG.proxyUrl, {
-                    method: 'POST',
-                    headers: { 'X-Client-ID': CONFIG.clientId },
-                    body: formData
-                });
-
-                const data = await response.json();
-
-                if (data.Status === 'Success' && data.Result) {
-                    const byteChars = atob(data.Result);
-                    const byteArray = new Uint8Array(byteChars.length);
-                    for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-                    const blob = new Blob([byteArray], { type: 'application/pdf' });
-                    const blobUrl = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = blobUrl;
-                    link.download = fileName.replace(/\.[^/.]+$/, '') + '.pdf';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                } else {
-                    throw new Error(data.Result || 'Failed to download fax');
-                }
+                const faxData = await retrieveFaxData(fax, 'OUT');
+                const byteChars = atob(faxData);
+                const byteArray = new Uint8Array(byteChars.length);
+                for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+                const blob = new Blob([byteArray], { type: 'application/pdf' });
+                const blobUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = archiveDownloadName(fax);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
             } catch (error) {
                 alert('Download error: ' + error.message);
             } finally {
-                const btn = event.target;
                 btn.textContent = 'Download';
                 btn.disabled = false;
             }
         }
 
-        async function previewFax(fileName, recipientInfo) {
-            currentFileName = fileName;
+        async function previewFaxByIndex(index) {
+            const fax = filteredFaxes[index];
+            if (!fax) return;
+            const recipientInfo = formatPhone(fax.ToFaxNumber || fax.DestinationFaxNumber || fax.RemoteDisplay);
+            await previewFax(fax, recipientInfo);
+        }
+
+        async function previewFax(fax, recipientInfo) {
+            currentFileName = archiveDownloadName(fax);
             document.getElementById('modalTitle').textContent = 'Fax to ' + (recipientInfo || 'Unknown');
             document.getElementById('modalBody').innerHTML = '<div class="modal-loading"><div class="spinner"></div> Loading fax...</div>';
             document.getElementById('pdfModal').classList.add('visible');
 
             try {
-                const formData = new FormData();
-                formData.append('action', 'Retrieve_Fax');
-                formData.append('sFaxFileName', fileName);
-                formData.append('sDirection', 'OUT');
-                formData.append('sFaxFormat', 'PDF');
-
-                const response = await fetch(CONFIG.proxyUrl, {
-                    method: 'POST',
-                    headers: { 'X-Client-ID': CONFIG.clientId },
-                    body: formData
-                });
-
-                const data = await response.json();
-
-                if (data.Status === 'Success' && data.Result) {
-                    currentPdfData = data.Result;
+                const faxData = await retrieveFaxData(fax, 'OUT');
+                currentPdfData = faxData;
 
                     // Convert base64 to blob URL — required for iOS Safari/Teams (data: URLs are blocked in iframes on iOS)
-                    const byteChars = atob(data.Result);
+                    const byteChars = atob(faxData);
                     const byteArray = new Uint8Array(byteChars.length);
                     for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
                     const blob = new Blob([byteArray], { type: 'application/pdf' });
@@ -565,9 +616,6 @@
                             </div>
                         </object>
                     `;
-                } else {
-                    throw new Error(data.Result || 'Failed to load fax');
-                }
             } catch (error) {
                 document.getElementById('modalBody').innerHTML = `
                     <div class="modal-loading">
@@ -610,7 +658,7 @@
             const headers = ['Date', 'To', 'Pages', 'Status'];
             const rows = filteredFaxes.map(f => [
                 f.Date || '',
-                f.ToFaxNumber || f.DestinationFaxNumber || '',
+                f.ToFaxNumber || f.DestinationFaxNumber || f.RemoteDisplay || '',
                 f.Pages || '',
                 f.SentStatus || 'Pending'
             ]);
