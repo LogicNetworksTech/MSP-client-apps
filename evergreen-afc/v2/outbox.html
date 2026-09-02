@@ -148,7 +148,12 @@
         </div>
         
         <div class="search-bar">
-            <input type="text" class="search-input" id="searchInput" placeholder="Search by recipient fax number..." oninput="filterFaxes()">
+            <input type="text" class="search-input" id="searchInput" placeholder="Search recipient, company, number, status, date, file, or content..." oninput="filterFaxes()">
+            <select class="filter-select" id="searchScope" onchange="filterFaxes()">
+                <option value="all">All Search</option>
+                <option value="person">Person / Company</option>
+                <option value="content">Fax Content</option>
+            </select>
             <select class="filter-select" id="dateFilter" onchange="filterFaxes()">
                 <option value="all">All Time</option>
                 <option value="today">Today</option>
@@ -212,11 +217,40 @@
         let perPage = 10;
         let currentPdfData = null;
         let currentFileName = null;
+        let contactIndex = new Map();
+
+        const CONTENT_SEARCH_FIELDS = [
+            'SearchText',
+            'TextContent',
+            'OcrText',
+            'OCRText',
+            'ExtractedText',
+            'ArchiveText',
+            'ContentText',
+            'Subject',
+            'CoverSubject',
+            'CoverMessage',
+            'Notes',
+            'Message',
+            'ArchiveBodyText',
+            'AttachmentText'
+        ];
+
+        const SKIP_GENERIC_SEARCH_FIELDS = new Set([
+            'Result',
+            'sFileContent_1',
+            'FileContent',
+            'AttachmentContent',
+            'ArchiveAttachment',
+            'ArchiveAttachments'
+        ]);
 
         document.addEventListener('DOMContentLoaded', loadOutbox);
 
         async function loadOutbox() {
             try {
+                const contactsPromise = loadContactsIndex();
+
                 const formData = new FormData();
                 formData.append('action', 'Get_Fax_Outbox');
                 formData.append('sPeriod', 'ALL');
@@ -232,6 +266,7 @@
 
                 const liveFaxes = (data.Status === 'Success' && Array.isArray(data.Result)) ? data.Result : [];
                 const archiveFaxes = await loadArchive('outbox');
+                await contactsPromise;
 
                 if (liveFaxes.length || archiveFaxes.length) {
                     allFaxes = mergeAndSortFaxes(liveFaxes, archiveFaxes);
@@ -264,6 +299,34 @@
             }
         }
 
+        async function loadContactsIndex() {
+            try {
+                const response = await fetch(`${CONFIG.proxyUrl}/contacts`, {
+                    headers: { 'X-Client-ID': CONFIG.clientId }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Contacts request failed: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const contacts = Array.isArray(data.contacts) ? data.contacts : [];
+                const nextIndex = new Map();
+
+                contacts.forEach(contact => {
+                    const number = normalizePhone(contact.number);
+                    if (number) {
+                        nextIndex.set(number, contact);
+                    }
+                });
+
+                contactIndex = nextIndex;
+            } catch (error) {
+                console.warn('Contact index unavailable:', error);
+                contactIndex = new Map();
+            }
+        }
+
         function mergeAndSortFaxes(liveFaxes, archiveFaxes) {
             return [...liveFaxes, ...archiveFaxes].sort((a, b) => getFaxTime(b) - getFaxTime(a));
         }
@@ -290,14 +353,170 @@
             document.getElementById('failedCount').textContent = failed;
         }
 
+        function normalizePhone(value) {
+            const digits = String(value || '').replace(/\D/g, '');
+            if (digits.length === 11 && digits.startsWith('1')) {
+                return digits.slice(1);
+            }
+            return digits;
+        }
+
+        function normalizeSearch(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^\p{L}\p{N}]+/gu, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function getSearchTokens(searchTerm) {
+            return normalizeSearch(searchTerm).split(' ').filter(Boolean);
+        }
+
+        function addSearchValue(fields, value) {
+            if (value === undefined || value === null || typeof value === 'object') {
+                return;
+            }
+
+            const text = String(value).trim();
+            if (!text) {
+                return;
+            }
+
+            fields.push(text);
+
+            const phone = normalizePhone(text);
+            if (phone && phone !== text) {
+                fields.push(phone);
+            }
+        }
+
+        function getFaxNumbers(fax, direction = 'outbox') {
+            const values = direction === 'inbox'
+                ? [fax.CallerID, fax.RemoteID, fax.RemoteDisplay, fax.FromFaxNumber]
+                : [fax.ToFaxNumber, fax.DestinationFaxNumber, fax.RemoteDisplay, fax.RemoteID];
+
+            return [...new Set(values.map(normalizePhone).filter(Boolean))];
+        }
+
+        function getContactForFax(fax, direction = 'outbox') {
+            for (const number of getFaxNumbers(fax, direction)) {
+                if (contactIndex.has(number)) {
+                    return contactIndex.get(number);
+                }
+            }
+            return null;
+        }
+
+        function getContactDisplay(contact, fallbackNumber) {
+            if (!contact) {
+                return formatPhone(fallbackNumber) || 'Unknown';
+            }
+
+            const name = (contact.name || '').trim();
+            const org = (contact.org || '').trim();
+            const phone = formatPhone(contact.number || fallbackNumber);
+            const label = [name, org].filter(Boolean).join(' - ');
+
+            if (label && phone) {
+                return `${label} (${phone})`;
+            }
+
+            return label || phone || 'Unknown';
+        }
+
+        function addContactSearchFields(fields, contact) {
+            if (!contact) {
+                return;
+            }
+
+            ['name', 'org', 'email', 'notes', 'number'].forEach(field => {
+                addSearchValue(fields, contact[field]);
+            });
+        }
+
+        function isContentField(fieldName) {
+            return CONTENT_SEARCH_FIELDS.includes(fieldName) ||
+                /content|ocr|extract|body|message|subject|notes/i.test(fieldName);
+        }
+
+        function addGenericRecordFields(fields, fax) {
+            Object.entries(fax).forEach(([key, value]) => {
+                if (SKIP_GENERIC_SEARCH_FIELDS.has(key) || isContentField(key)) {
+                    return;
+                }
+                addSearchValue(fields, value);
+            });
+        }
+
+        function addContentRecordFields(fields, fax) {
+            CONTENT_SEARCH_FIELDS.forEach(field => {
+                addSearchValue(fields, fax[field]);
+            });
+        }
+
+        function collectSearchFields(fax, direction, scope) {
+            const fields = [];
+            const contact = getContactForFax(fax, direction);
+
+            if (scope === 'all' || scope === 'person') {
+                addContactSearchFields(fields, contact);
+                getFaxNumbers(fax, direction).forEach(number => addSearchValue(fields, number));
+                ['CallerID', 'RemoteID', 'RemoteDisplay', 'FromFaxNumber', 'ToFaxNumber', 'DestinationFaxNumber'].forEach(field => {
+                    addSearchValue(fields, fax[field]);
+                });
+            }
+
+            if (scope === 'all') {
+                addGenericRecordFields(fields, fax);
+            }
+
+            if (scope === 'all' || scope === 'content') {
+                addContentRecordFields(fields, fax);
+            }
+
+            return fields;
+        }
+
+        function faxMatchesSearch(fax, searchTerm, scope, direction) {
+            const tokens = getSearchTokens(searchTerm);
+            if (!tokens.length) {
+                return true;
+            }
+
+            const fields = collectSearchFields(fax, direction, scope);
+            const haystack = normalizeSearch(fields.join(' '));
+            const numericHaystack = fields.map(normalizePhone).filter(Boolean).join(' ');
+
+            return tokens.every(token => {
+                const numericToken = normalizePhone(token);
+                return haystack.includes(token) ||
+                    (numericToken && numericHaystack.includes(numericToken));
+            });
+        }
+
+        function escapeHtml(value) {
+            return String(value || '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
+        function csvCell(value) {
+            return `"${String(value ?? '').replace(/"/g, '""')}"`;
+        }
+
         function filterFaxes() {
             const search = document.getElementById('searchInput').value.toLowerCase();
+            const searchScope = document.getElementById('searchScope').value;
             const dateFilter = document.getElementById('dateFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
 
             filteredFaxes = allFaxes.filter(fax => {
-                const toNum = fax.ToFaxNumber || fax.DestinationFaxNumber || fax.RemoteDisplay || '';
-                const matchSearch = !search || toNum.toLowerCase().includes(search);
+                const matchSearch = faxMatchesSearch(fax, search, searchScope, 'outbox');
 
                 let matchDate = true;
                 if (dateFilter !== 'all') {
@@ -340,6 +559,8 @@
             container.innerHTML = pageFaxes.map((fax, offset) => {
                 const faxIndex = start + offset;
                 const toNum = fax.ToFaxNumber || fax.DestinationFaxNumber || fax.RemoteDisplay || 'Unknown';
+                const contact = getContactForFax(fax, 'outbox');
+                const displayTo = getContactDisplay(contact, toNum);
                 const status = fax.SentStatus || 'Pending';
                 const statusClass = status === 'Sent' ? 'sent' : status === 'Failed' ? 'failed' : 'pending';
                 const statusText = status === 'Sent' ? 'Delivered' : status;
@@ -354,14 +575,14 @@
                     <div class="fax-item">
                         <span class="fax-icon">${status === 'Failed' ? '❌' : status === 'Sent' ? '✅' : '⏳'}</span>
                         <div class="fax-details">
-                            <div class="fax-to">To: ${formatPhone(toNum)}${archiveBadge}</div>
-                            <div class="fax-date">${fax.Date || 'Unknown date'} ${fax.EpochTime ? '• ' + new Date(fax.EpochTime * 1000).toLocaleTimeString() : ''}</div>
-                            ${errorReason ? `<div class="fax-error">⚠️ ${errorReason}</div>` : ''}
+                            <div class="fax-to">To: ${escapeHtml(displayTo)}${archiveBadge}</div>
+                            <div class="fax-date">${escapeHtml(fax.Date || 'Unknown date')} ${fax.EpochTime ? '• ' + new Date(fax.EpochTime * 1000).toLocaleTimeString() : ''}</div>
+                            ${errorReason ? `<div class="fax-error">⚠️ ${escapeHtml(errorReason)}</div>` : ''}
                         </div>
-                        <span class="fax-pages">${fax.Pages || '?'} pages</span>
-                        <span class="fax-status ${statusClass}">${statusText}</span>
+                        <span class="fax-pages">${escapeHtml(fax.Pages || '?')} pages</span>
+                        <span class="fax-status ${statusClass}">${escapeHtml(statusText)}</span>
                         <div class="fax-actions">
-                            ${showRetry ? `<button class="action-btn retry-btn" onclick="retryFax('${fax.FileName}', '${toNum}')">🔄 Retry</button>` : ''}
+                            ${showRetry ? `<button class="action-btn retry-btn" onclick="retryFaxByIndex(${faxIndex}, this)">🔄 Retry</button>` : ''}
                             <button class="action-btn" onclick="downloadFaxByIndex(${faxIndex})" ${hasPreview ? '' : 'disabled'}>Download</button>
                             <button class="action-btn secondary" onclick="previewFaxByIndex(${faxIndex})" ${hasPreview ? '' : 'disabled'}>Preview</button>
                         </div>
@@ -401,11 +622,23 @@
             if (errorText && errorText !== 'Failed') return errorText;
             return 'Transmission failed - check recipient number';
         }
+
+        async function retryFaxByIndex(index, btn) {
+            const fax = filteredFaxes[index];
+            if (!fax) return;
+
+            const toNumber = fax.ToFaxNumber || fax.DestinationFaxNumber || fax.RemoteDisplay || '';
+            if (!fax.FileName || !toNumber) {
+                alert('Fax record is missing the required retry details');
+                return;
+            }
+
+            await retryFax(fax.FileName, toNumber, btn);
+        }
         
-        async function retryFax(fileName, toNumber) {
+        async function retryFax(fileName, toNumber, btn) {
             if (!confirm(`Retry sending fax to ${formatPhone(toNumber)}?`)) return;
             
-            const btn = event.target;
             btn.disabled = true;
             btn.textContent = 'Retrying...';
             
@@ -586,7 +819,8 @@
         async function previewFaxByIndex(index) {
             const fax = filteredFaxes[index];
             if (!fax) return;
-            const recipientInfo = formatPhone(fax.ToFaxNumber || fax.DestinationFaxNumber || fax.RemoteDisplay);
+            const recipientNumber = fax.ToFaxNumber || fax.DestinationFaxNumber || fax.RemoteDisplay || '';
+            const recipientInfo = getContactDisplay(getContactForFax(fax, 'outbox'), recipientNumber);
             await previewFax(fax, recipientInfo);
         }
 
@@ -621,7 +855,7 @@
                     <div class="modal-loading">
                         <div style="text-align: center;">
                             <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
-                            <p style="margin-bottom: 16px;">Could not preview fax: ${error.message}</p>
+                            <p style="margin-bottom: 16px;">Could not preview fax: ${escapeHtml(error.message)}</p>
                             <button class="btn" onclick="downloadCurrentFax()">Download PDF Instead</button>
                         </div>
                     </div>
@@ -655,15 +889,21 @@
         function exportToCSV() {
             if (filteredFaxes.length === 0) { alert('No faxes to export'); return; }
 
-            const headers = ['Date', 'To', 'Pages', 'Status'];
-            const rows = filteredFaxes.map(f => [
-                f.Date || '',
-                f.ToFaxNumber || f.DestinationFaxNumber || f.RemoteDisplay || '',
-                f.Pages || '',
-                f.SentStatus || 'Pending'
-            ]);
+            const headers = ['Date', 'To', 'Contact', 'Company', 'Pages', 'Status', 'Source'];
+            const rows = filteredFaxes.map(f => {
+                const contact = getContactForFax(f, 'outbox');
+                return [
+                    f.Date || '',
+                    f.ToFaxNumber || f.DestinationFaxNumber || f.RemoteDisplay || '',
+                    contact?.name || '',
+                    contact?.org || '',
+                    f.Pages || '',
+                    f.SentStatus || 'Pending',
+                    f.ArchiveRecord ? 'archive' : 'live'
+                ];
+            });
 
-            const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
+            const csv = [headers.map(csvCell).join(','), ...rows.map(r => r.map(csvCell).join(','))].join('\n');
             
             const link = document.createElement('a');
             link.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);

@@ -139,7 +139,12 @@
         </div>
         
         <div class="search-bar">
-            <input type="text" class="search-input" id="searchInput" placeholder="Search by phone number or caller ID..." oninput="filterFaxes()">
+            <input type="text" class="search-input" id="searchInput" placeholder="Search name, company, number, date, file, or content..." oninput="filterFaxes()">
+            <select class="filter-select" id="searchScope" onchange="filterFaxes()">
+                <option value="all">All Search</option>
+                <option value="person">Person / Company</option>
+                <option value="content">Fax Content</option>
+            </select>
             <select class="filter-select" id="dateFilter" onchange="filterFaxes()">
                 <option value="all">All Time</option>
                 <option value="today">Today</option>
@@ -202,11 +207,40 @@
         let perPage = 10;
         let currentPdfData = null;
         let currentFileName = null;
+        let contactIndex = new Map();
+
+        const CONTENT_SEARCH_FIELDS = [
+            'SearchText',
+            'TextContent',
+            'OcrText',
+            'OCRText',
+            'ExtractedText',
+            'ArchiveText',
+            'ContentText',
+            'Subject',
+            'CoverSubject',
+            'CoverMessage',
+            'Notes',
+            'Message',
+            'ArchiveBodyText',
+            'AttachmentText'
+        ];
+
+        const SKIP_GENERIC_SEARCH_FIELDS = new Set([
+            'Result',
+            'sFileContent_1',
+            'FileContent',
+            'AttachmentContent',
+            'ArchiveAttachment',
+            'ArchiveAttachments'
+        ]);
 
         document.addEventListener('DOMContentLoaded', loadInbox);
 
         async function loadInbox() {
             try {
+                const contactsPromise = loadContactsIndex();
+
                 const formData = new FormData();
                 formData.append('action', 'Get_Fax_Inbox');
                 formData.append('sPeriod', 'ALL');
@@ -222,6 +256,7 @@
 
                 const liveFaxes = (data.Status === 'Success' && Array.isArray(data.Result)) ? data.Result : [];
                 const archiveFaxes = await loadArchive('inbox');
+                await contactsPromise;
 
                 if (liveFaxes.length || archiveFaxes.length) {
                     allFaxes = mergeAndSortFaxes(liveFaxes, archiveFaxes);
@@ -254,6 +289,34 @@
             }
         }
 
+        async function loadContactsIndex() {
+            try {
+                const response = await fetch(`${CONFIG.proxyUrl}/contacts`, {
+                    headers: { 'X-Client-ID': CONFIG.clientId }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Contacts request failed: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const contacts = Array.isArray(data.contacts) ? data.contacts : [];
+                const nextIndex = new Map();
+
+                contacts.forEach(contact => {
+                    const number = normalizePhone(contact.number);
+                    if (number) {
+                        nextIndex.set(number, contact);
+                    }
+                });
+
+                contactIndex = nextIndex;
+            } catch (error) {
+                console.warn('Contact index unavailable:', error);
+                contactIndex = new Map();
+            }
+        }
+
         function mergeAndSortFaxes(liveFaxes, archiveFaxes) {
             return [...liveFaxes, ...archiveFaxes].sort((a, b) => getFaxTime(b) - getFaxTime(a));
         }
@@ -275,16 +338,170 @@
             document.getElementById('unreadCount').textContent = unread;
         }
 
+        function normalizePhone(value) {
+            const digits = String(value || '').replace(/\D/g, '');
+            if (digits.length === 11 && digits.startsWith('1')) {
+                return digits.slice(1);
+            }
+            return digits;
+        }
+
+        function normalizeSearch(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^\p{L}\p{N}]+/gu, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function getSearchTokens(searchTerm) {
+            return normalizeSearch(searchTerm).split(' ').filter(Boolean);
+        }
+
+        function addSearchValue(fields, value) {
+            if (value === undefined || value === null || typeof value === 'object') {
+                return;
+            }
+
+            const text = String(value).trim();
+            if (!text) {
+                return;
+            }
+
+            fields.push(text);
+
+            const phone = normalizePhone(text);
+            if (phone && phone !== text) {
+                fields.push(phone);
+            }
+        }
+
+        function getFaxNumbers(fax, direction = 'inbox') {
+            const values = direction === 'inbox'
+                ? [fax.CallerID, fax.RemoteID, fax.RemoteDisplay, fax.FromFaxNumber]
+                : [fax.ToFaxNumber, fax.DestinationFaxNumber, fax.RemoteDisplay, fax.RemoteID];
+
+            return [...new Set(values.map(normalizePhone).filter(Boolean))];
+        }
+
+        function getContactForFax(fax, direction = 'inbox') {
+            for (const number of getFaxNumbers(fax, direction)) {
+                if (contactIndex.has(number)) {
+                    return contactIndex.get(number);
+                }
+            }
+            return null;
+        }
+
+        function getContactDisplay(contact, fallbackNumber) {
+            if (!contact) {
+                return formatPhone(fallbackNumber) || 'Unknown';
+            }
+
+            const name = (contact.name || '').trim();
+            const org = (contact.org || '').trim();
+            const phone = formatPhone(contact.number || fallbackNumber);
+            const label = [name, org].filter(Boolean).join(' - ');
+
+            if (label && phone) {
+                return `${label} (${phone})`;
+            }
+
+            return label || phone || 'Unknown';
+        }
+
+        function addContactSearchFields(fields, contact) {
+            if (!contact) {
+                return;
+            }
+
+            ['name', 'org', 'email', 'notes', 'number'].forEach(field => {
+                addSearchValue(fields, contact[field]);
+            });
+        }
+
+        function isContentField(fieldName) {
+            return CONTENT_SEARCH_FIELDS.includes(fieldName) ||
+                /content|ocr|extract|body|message|subject|notes/i.test(fieldName);
+        }
+
+        function addGenericRecordFields(fields, fax) {
+            Object.entries(fax).forEach(([key, value]) => {
+                if (SKIP_GENERIC_SEARCH_FIELDS.has(key) || isContentField(key)) {
+                    return;
+                }
+                addSearchValue(fields, value);
+            });
+        }
+
+        function addContentRecordFields(fields, fax) {
+            CONTENT_SEARCH_FIELDS.forEach(field => {
+                addSearchValue(fields, fax[field]);
+            });
+        }
+
+        function collectSearchFields(fax, direction, scope) {
+            const fields = [];
+            const contact = getContactForFax(fax, direction);
+
+            if (scope === 'all' || scope === 'person') {
+                addContactSearchFields(fields, contact);
+                getFaxNumbers(fax, direction).forEach(number => addSearchValue(fields, number));
+                ['CallerID', 'RemoteID', 'RemoteDisplay', 'FromFaxNumber', 'ToFaxNumber', 'DestinationFaxNumber'].forEach(field => {
+                    addSearchValue(fields, fax[field]);
+                });
+            }
+
+            if (scope === 'all') {
+                addGenericRecordFields(fields, fax);
+            }
+
+            if (scope === 'all' || scope === 'content') {
+                addContentRecordFields(fields, fax);
+            }
+
+            return fields;
+        }
+
+        function faxMatchesSearch(fax, searchTerm, scope, direction) {
+            const tokens = getSearchTokens(searchTerm);
+            if (!tokens.length) {
+                return true;
+            }
+
+            const fields = collectSearchFields(fax, direction, scope);
+            const haystack = normalizeSearch(fields.join(' '));
+            const numericHaystack = fields.map(normalizePhone).filter(Boolean).join(' ');
+
+            return tokens.every(token => {
+                const numericToken = normalizePhone(token);
+                return haystack.includes(token) ||
+                    (numericToken && numericHaystack.includes(numericToken));
+            });
+        }
+
+        function escapeHtml(value) {
+            return String(value || '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
+        function csvCell(value) {
+            return `"${String(value ?? '').replace(/"/g, '""')}"`;
+        }
+
         function filterFaxes() {
             const search = document.getElementById('searchInput').value.toLowerCase();
+            const searchScope = document.getElementById('searchScope').value;
             const dateFilter = document.getElementById('dateFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
 
             filteredFaxes = allFaxes.filter(fax => {
-                const matchSearch = !search || 
-                    (fax.CallerID || '').toLowerCase().includes(search) ||
-                    (fax.RemoteID || '').toLowerCase().includes(search) ||
-                    (fax.RemoteDisplay || '').toLowerCase().includes(search);
+                const matchSearch = faxMatchesSearch(fax, search, searchScope, 'inbox');
 
                 let matchDate = true;
                 if (dateFilter !== 'all') {
@@ -325,20 +542,25 @@
 
             container.innerHTML = pageFaxes.map((fax, offset) => {
                 const faxIndex = start + offset;
-                const displayFrom = formatPhone(fax.CallerID || fax.RemoteDisplay) || 'Unknown';
+                const callerNumber = fax.CallerID || fax.RemoteDisplay || fax.RemoteID || fax.FromFaxNumber || '';
+                const contact = getContactForFax(fax, 'inbox');
+                const displayFrom = getContactDisplay(contact, callerNumber);
+                const remoteDetail = fax.RemoteID && fax.RemoteID !== callerNumber
+                    ? ` • Remote ID: ${escapeHtml(fax.RemoteID)}`
+                    : '';
                 const archiveBadge = fax.ArchiveRecord ? '<span class="archive-badge">Archived</span>' : '';
                 const hasPreview = !fax.ArchiveRecord || fax.PreviewAvailable;
                 return `
                 <div class="fax-item ${fax.ViewedStatus === 'N' ? 'unread' : ''}">
-                    <input type="checkbox" class="fax-checkbox" data-filename="${fax.FileName}">
+                    <input type="checkbox" class="fax-checkbox" data-filename="${escapeHtml(fax.FileName || '')}">
                     <span class="fax-icon">📄</span>
                     <div class="fax-details">
-                        <div class="fax-from">${displayFrom}${archiveBadge}</div>
-                        <div class="fax-date">${fax.Date || 'Unknown date'} ${fax.EpochTime ? '• ' + new Date(fax.EpochTime * 1000).toLocaleTimeString() : ''}</div>
+                        <div class="fax-from">${escapeHtml(displayFrom)}${archiveBadge}</div>
+                        <div class="fax-date">${escapeHtml(fax.Date || 'Unknown date')} ${fax.EpochTime ? '• ' + new Date(fax.EpochTime * 1000).toLocaleTimeString() : ''}${remoteDetail}</div>
                     </div>
-                    <span class="fax-pages">${fax.Pages || '?'} pages</span>
+                    <span class="fax-pages">${escapeHtml(fax.Pages || '?')} pages</span>
                     <div class="fax-actions">
-                        ${fax.ViewedStatus === 'N' && !fax.ArchiveRecord ? `<button class="action-btn secondary" onclick="markAsRead('${fax.FileName}', this)">Mark Read</button>` : ''}
+                        ${fax.ViewedStatus === 'N' && !fax.ArchiveRecord ? `<button class="action-btn secondary" onclick="markAsReadByIndex(${faxIndex}, this)">Mark Read</button>` : ''}
                         <button class="action-btn" onclick="downloadFaxByIndex(${faxIndex})" ${hasPreview ? '' : 'disabled'}>Download</button>
                         <button class="action-btn secondary" onclick="previewFaxByIndex(${faxIndex})" ${hasPreview ? '' : 'disabled'}>Preview</button>
                     </div>
@@ -473,7 +695,8 @@
         async function previewFaxByIndex(index) {
             const fax = filteredFaxes[index];
             if (!fax) return;
-            await previewFax(fax, formatPhone(fax.CallerID || fax.RemoteDisplay));
+            const callerNumber = fax.CallerID || fax.RemoteDisplay || fax.RemoteID || fax.FromFaxNumber || '';
+            await previewFax(fax, getContactDisplay(getContactForFax(fax, 'inbox'), callerNumber));
         }
 
         async function previewFax(fax, callerInfo) {
@@ -507,7 +730,7 @@
                     <div class="modal-loading">
                         <div style="text-align: center;">
                             <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
-                            <p style="margin-bottom: 16px;">Could not preview fax: ${error.message}</p>
+                            <p style="margin-bottom: 16px;">Could not preview fax: ${escapeHtml(error.message)}</p>
                             <button class="btn" onclick="downloadCurrentFax()">Download PDF Instead</button>
                         </div>
                     </div>
@@ -541,16 +764,22 @@
         function exportToCSV() {
             if (filteredFaxes.length === 0) { alert('No faxes to export'); return; }
 
-            const headers = ['Date', 'From', 'Remote ID', 'Pages', 'Status'];
-            const rows = filteredFaxes.map(f => [
-                f.Date || '',
-                f.CallerID || f.RemoteDisplay || '',
-                f.RemoteID || f.RemoteDisplay || '',
-                f.Pages || '',
-                f.ViewedStatus === 'N' ? 'Unread' : 'Read'
-            ]);
+            const headers = ['Date', 'From', 'Contact', 'Company', 'Remote ID', 'Pages', 'Status', 'Source'];
+            const rows = filteredFaxes.map(f => {
+                const contact = getContactForFax(f, 'inbox');
+                return [
+                    f.Date || '',
+                    f.CallerID || f.RemoteDisplay || f.FromFaxNumber || '',
+                    contact?.name || '',
+                    contact?.org || '',
+                    f.RemoteID || f.RemoteDisplay || '',
+                    f.Pages || '',
+                    f.ViewedStatus === 'N' ? 'Unread' : 'Read',
+                    f.ArchiveRecord ? 'archive' : 'live'
+                ];
+            });
 
-            const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
+            const csv = [headers.map(csvCell).join(','), ...rows.map(r => r.map(csvCell).join(','))].join('\n');
             
             const link = document.createElement('a');
             link.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
@@ -558,6 +787,16 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        }
+
+        function markAsReadByIndex(index, btn) {
+            const fax = filteredFaxes[index];
+            if (!fax || !fax.FileName) {
+                alert('Fax record is missing the required file reference');
+                return;
+            }
+
+            markAsRead(fax.FileName, btn);
         }
 
         async function markAsRead(fileName, btn) {
